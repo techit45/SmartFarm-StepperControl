@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌱 Smart Farm — Plant Monitoring Dashboard</title>
+    <meta name="description" content="Smart Farm Dashboard — Stepper Motor + Camera + Leaf Analysis">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{
+            --orange:#F26522;--orange-d:#D4541A;--orange-l:#FF8A50;
+            --orange-pale:#FFF6F0;--white:#fff;--bg:#F5F6FA;--card:#fff;
+            --border:#EDE5DE;--border-lt:#F5EFE9;
+            --txt:#2D2D2D;--txt2:#6B7280;--muted:#9CA3AF;
+            --green:#22C55E;--green-bg:#F0FDF4;--green-bdr:#BBF7D0;
+            --blue:#3B82F6;--blue-bg:#EFF6FF;--red:#EF4444;
+            --sh-sm:0 1px 3px rgba(0,0,0,.05);--sh-md:0 4px 14px rgba(0,0,0,.07);
+            --sh-lg:0 8px 32px rgba(0,0,0,.09);
+            --r:16px;--rs:10px;
+        }
+        body{font-family:'Inter','Kanit',sans-serif;background:var(--bg);color:var(--txt);height:100vh;overflow:hidden;display:flex;flex-direction:column}
+
+        /* BANNER */
+        .banner{width:100%;height:44px;background:var(--orange);flex-shrink:0}
+        .banner img{width:100%;height:100%;object-fit:cover;object-position:center}
+
+        /* HEADER */
+        .hdr{background:var(--white);border-bottom:1px solid var(--border);padding:10px 28px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+        .hdr-l{display:flex;align-items:center;gap:12px}
+        .hdr-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--orange),var(--orange-l));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;box-shadow:0 2px 10px rgba(242,101,34,.25)}
+        .hdr h1{font-size:1.05rem;font-weight:700}.hdr h1 span{color:var(--orange)}
+        .hdr-sub{font-size:.62rem;color:var(--muted)}
+        .hdr-r{display:flex;gap:10px;align-items:center}
+        .chip{display:flex;align-items:center;gap:5px;padding:5px 14px;border-radius:20px;font-size:.7rem;font-weight:500;background:var(--bg);border:1px solid var(--border)}
+        .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--red)}
+        .chip .dot.on{background:var(--green);box-shadow:0 0 6px rgba(34,197,94,.5)}
+        .chip.ora{background:var(--orange-pale);border-color:rgba(242,101,34,.15);color:var(--orange);font-weight:600}
+
+        /* TABS */
+        .tabs{display:flex;background:var(--white);border-bottom:2px solid var(--border);padding:0 28px;flex-shrink:0}
+        .tab{padding:10px 22px;font-size:.8rem;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s;display:flex;align-items:center;gap:6px;user-select:none}
+        .tab:hover{color:var(--orange)}.tab.active{color:var(--orange);border-bottom-color:var(--orange)}
+
+        /* CONTENT */
+        .content{flex:1;overflow:hidden;position:relative}
+        .pane{display:none;width:100%;height:100%}.pane.active{display:flex}
+
+        /* ===== DASHBOARD ===== */
+        .dash{padding:20px 28px;gap:20px;overflow-y:auto}
+        .dash-main{flex:1;display:flex;flex-direction:column;gap:16px;min-width:0}
+        .dash-side{width:360px;flex-shrink:0;display:flex;flex-direction:column;gap:16px}
+
+        /* 3D */
+        .view3d{flex:1;min-height:300px;position:relative;border-radius:var(--r);overflow:hidden;background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);box-shadow:var(--sh-lg);border:1px solid var(--border)}
+        #scene3d{width:100%;height:100%;display:block}
+        .badges{position:absolute;bottom:14px;left:14px;display:flex;gap:6px}
+        .bdg{padding:5px 14px;background:rgba(255,255,255,.12);backdrop-filter:blur(8px);border-radius:8px;font-size:.7rem;color:#fff;border:1px solid rgba(255,255,255,.15)}
+        .bdg.ora{background:rgba(242,101,34,.35);border-color:rgba(242,101,34,.5)}
+
+        /* Camera mini */
+        .cam-mini{height:200px;flex-shrink:0;position:relative;border-radius:var(--r);overflow:hidden;background:#111;box-shadow:var(--sh-md);border:1px solid var(--border)}
+        .cam-mini img{width:100%;height:100%;object-fit:cover}
+        .live-tag{position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:6px;padding:5px 12px;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border-radius:8px;font-size:.7rem;color:#fff}
+        .live-tag .rd{width:7px;height:7px;border-radius:50%;background:var(--red);animation:bk 1.2s infinite}
+        @keyframes bk{0%,100%{opacity:1}50%{opacity:.3}}
+        .mot-tag{position:absolute;top:10px;right:10px;padding:5px 12px;background:rgba(242,101,34,.9);border-radius:8px;font-size:.7rem;color:#fff;font-weight:600;display:none}
+        .mot-tag.show{display:flex;align-items:center;gap:5px}
+
+        /* CARD */
+        .cd{background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--sh-sm);overflow:hidden}
+        .cd-h{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border-lt);background:linear-gradient(180deg,var(--bg) 0%,var(--card) 100%)}
+        .cd-t{font-size:.76rem;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--txt2);display:flex;align-items:center;gap:6px}
+        .cd-i{font-size:.62rem;color:var(--muted)}
+        .cd-b{padding:18px}
+
+        /* Metrics */
+        .met-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+        .met{text-align:center;padding:16px 8px 12px;border-radius:var(--rs);background:var(--bg);border:1px solid var(--border)}
+        .met.g{background:var(--green-bg);border-color:var(--green-bdr)}
+        .met.o{background:var(--orange-pale);border-color:rgba(242,101,34,.15)}
+        .met.b{background:var(--blue-bg);border-color:rgba(59,130,246,.15)}
+        .met-v{font-size:1.5rem;font-weight:800;line-height:1}
+        .met.g .met-v{color:var(--green)}.met.o .met-v{color:var(--orange)}.met.b .met-v{color:var(--blue)}
+        .met-l{font-size:.6rem;font-weight:600;color:var(--muted);text-transform:uppercase;margin-top:6px;letter-spacing:.4px}
+
+        /* Pots */
+        .pot-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .pot{padding:20px 14px;border-radius:var(--rs);border:2px solid var(--border);background:var(--bg);text-align:center;cursor:pointer;transition:all .25s;position:relative;overflow:hidden}
+        .pot::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--border);transition:background .25s}
+        .pot:hover{border-color:var(--orange);transform:translateY(-2px);box-shadow:0 6px 18px rgba(242,101,34,.12)}
+        .pot:hover::before{background:var(--orange)}
+        .pot.active{border-color:var(--orange);background:var(--orange-pale)}
+        .pot.active::before{background:var(--orange)}
+        .pot-ico{font-size:1.8rem;margin-bottom:4px}
+        .pot-nm{font-size:.85rem;font-weight:700}
+        .pot-inf{font-size:.65rem;color:var(--muted);margin-top:4px;line-height:1.4}
+        .pot-inf.ok{color:var(--green);font-weight:500}
+
+        /* Buttons */
+        .bg2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+        .bt{padding:11px 10px;border:1px solid var(--border);border-radius:var(--rs);background:var(--bg);color:var(--txt);font-family:inherit;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:5px}
+        .bt:hover{background:var(--orange-pale);border-color:var(--orange);color:var(--orange);transform:translateY(-1px)}
+        .bt:active{transform:scale(.97)}
+        .bt.pr{background:linear-gradient(135deg,var(--orange),var(--orange-l));color:#fff;border-color:var(--orange);box-shadow:0 3px 10px rgba(242,101,34,.28)}
+        .bt.pr:hover{background:linear-gradient(135deg,var(--orange-d),var(--orange));color:#fff}
+        .bt.f{grid-column:1/-1}
+        .bt:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+
+        /* Motor */
+        .mot-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+        .ms{padding:10px 6px;border-radius:8px;background:var(--bg);border:1px solid var(--border);text-align:center}
+        .ms-l{font-size:.58rem;color:var(--muted);text-transform:uppercase;font-weight:600}
+        .ms-v{font-size:.9rem;font-weight:700;margin-top:3px}
+        .bar-w{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:10px}
+        .bar-f{height:100%;background:linear-gradient(90deg,var(--orange),var(--orange-l));border-radius:3px;transition:width .5s;width:0%}
+
+        /* ===== CAMERA FULL ===== */
+        .cam-full-pane{flex-direction:column;padding:0}
+        .cam-full{width:100%;height:100%;position:relative;background:#111}
+        .cam-full img{width:100%;height:100%;object-fit:contain;background:#111}
+
+        /* ===== DETAIL PANES ===== */
+        .detail{flex-direction:row;gap:20px;padding:20px 28px;flex-wrap:wrap;align-content:flex-start;overflow-y:auto}
+        .cd.half{flex:1 1 calc(50% - 10px);min-width:380px}
+        .motor-detail{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+        .md-stat{padding:14px 10px;border-radius:var(--rs);background:var(--bg);border:1px solid var(--border);text-align:center}
+        .md-stat-l{font-size:.62rem;color:var(--muted);text-transform:uppercase;font-weight:600}
+        .md-stat-v{font-size:1.05rem;font-weight:700;margin-top:4px}
+        .motor-bar{margin-top:14px;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
+        .motor-bar-f{height:100%;background:linear-gradient(90deg,var(--orange),var(--orange-l));border-radius:4px;transition:width .5s;width:0%}
+
+        /* Analysis detail */
+        .met-row-lg{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+        .met-lg{text-align:center;padding:20px 10px 14px;border-radius:var(--rs);background:var(--bg);border:1px solid var(--border)}
+        .met-lg.g{background:var(--green-bg);border-color:var(--green-bdr)}
+        .met-lg.o{background:var(--orange-pale);border-color:rgba(242,101,34,.15)}
+        .met-lg.b{background:var(--blue-bg);border-color:rgba(59,130,246,.15)}
+        .met-lg .met-v{font-size:2rem}
+        .met-lg .met-l{margin-top:8px}.met-lg .met-s{font-size:.58rem;color:var(--muted);margin-top:3px}
+
+        /* Leaf list */
+        .ll{margin-top:14px}
+        .li{display:grid;grid-template-columns:90px 1fr 100px 80px;gap:8px;align-items:center;padding:12px 14px;border-radius:8px;background:var(--bg);border:1px solid var(--border);margin-bottom:8px;font-size:.8rem;transition:border-color .2s}
+        .li:hover{border-color:var(--green)}
+        .li-n{font-weight:600;color:var(--green)}.li-d{color:var(--txt2)}.li-a{font-weight:600;text-align:right}.li-s{color:var(--muted);text-align:right}
+
+        /* History */
+        .hl{max-height:450px;overflow-y:auto}
+        .hr{display:grid;grid-template-columns:80px 65px 1fr auto;gap:10px;align-items:center;padding:12px 14px;border-radius:8px;background:var(--bg);border:1px solid var(--border);margin-bottom:6px;font-size:.8rem;transition:all .2s}
+        .hr:hover{border-color:var(--orange);background:var(--orange-pale)}
+        .hr-t{color:var(--muted);font-weight:500}
+        .hr-p{padding:3px 10px;border-radius:5px;background:var(--orange-pale);color:var(--orange);font-weight:700;font-size:.72rem;text-align:center}
+        .hr-d{color:var(--txt2)}.hr-g{font-weight:700;color:var(--green)}
+        .h-empty{text-align:center;padding:36px;color:var(--muted);font-size:.9rem}
+
+        /* Mini history */
+        .mini-hl{max-height:140px;overflow-y:auto}
+        .mini-hr{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:7px;background:var(--bg);border:1px solid var(--border);margin-bottom:5px;font-size:.72rem}
+        .mini-hr:hover{border-color:var(--orange)}
+
+        ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}::-webkit-scrollbar-thumb:hover{background:var(--orange)}
+
+        /* Toast */
+        .toast-wrap{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+        .toast{padding:12px 20px;border-radius:10px;font-size:.82rem;font-weight:500;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.15);animation:toastIn .3s ease;display:flex;align-items:center;gap:8px;max-width:350px}
+        .toast.err{background:linear-gradient(135deg,#EF4444,#DC2626)}
+        .toast.ok{background:linear-gradient(135deg,var(--green),#16A34A)}
+        .toast.warn{background:linear-gradient(135deg,var(--orange),var(--orange-d))}
+        @keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+        @keyframes toastOut{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(40px)}}
+    </style>
+</head>
+<body>
+
+<div class="toast-wrap" id="toastWrap"></div>
+<div class="banner"><img src="/static/img/banner.png" alt="KMUTT CPE"></div>
+
+<div class="hdr">
+    <div class="hdr-l">
+        <div class="hdr-icon">🌱</div>
+        <div><h1>Smart Farm <span>Dashboard</span></h1><div class="hdr-sub">Automatic Plant Monitoring & Analysis System</div></div>
+    </div>
+    <div class="hdr-r">
+        <div class="chip"><div class="dot" id="dotSerial"></div><span id="serialText">Serial</span></div>
+        <div class="chip"><div class="dot" id="dotCal"></div><span id="calText">Not Calibrated</span></div>
+        <div class="chip ora">📍 <span id="posText">Pos: 0</span></div>
+    </div>
+</div>
+
+<div class="tabs">
+    <div class="tab active" data-tab="t-dash">📊 Dashboard</div>
+    <div class="tab" data-tab="t-cam">📷 Camera</div>
+    <div class="tab" data-tab="t-ctrl">⚙️ Controls</div>
+    <div class="tab" data-tab="t-ana">🌿 Analysis & History</div>
+</div>
+
+<div class="content">
+
+<!-- ===== DASHBOARD ===== -->
+<div class="pane dash active" id="t-dash">
+    <div class="dash-main">
+        <div class="view3d" id="sceneContainer">
+            <canvas id="scene3d"></canvas>
+            <div class="badges">
+                <div class="bdg ora" id="sceneInfo">🌿 Click a pot to scan</div>
+                <div class="bdg">3D View</div>
+            </div>
+        </div>
+        <div class="cam-mini">
+            <img id="cameraFeed" src="/video_feed" alt="Live Camera">
+            <div class="live-tag"><div class="rd"></div> LIVE</div>
+            <div class="mot-tag" id="motorOv">⏳ <span id="motorOvText">Moving...</span></div>
+        </div>
+    </div>
+    <div class="dash-side">
+        <!-- Metrics -->
+        <div class="cd">
+            <div class="cd-h"><div class="cd-t">🌿 Leaf Analysis</div><div class="cd-i" id="qTime">—</div></div>
+            <div class="cd-b">
+                <div class="met-row">
+                    <div class="met g"><div class="met-v" id="qLeaves">—</div><div class="met-l">Leaves</div></div>
+                    <div class="met o"><div class="met-v" id="qArea">—</div><div class="met-l">Area px²</div></div>
+                    <div class="met b"><div class="met-v" id="qGreen">—</div><div class="met-l">Green %</div></div>
+                </div>
+            </div>
+        </div>
+        <!-- Pots -->
+        <div class="cd">
+            <div class="cd-h"><div class="cd-t">🪴 Plant Pots</div></div>
+            <div class="cd-b">
+                <div class="pot-row" id="potGrid"></div>
+                <div class="bg2">
+                    <button class="bt pr f" onclick="doAutoScan()">🔄 Auto Scan All</button>
+                    <button class="bt" onclick="doAnalyze()">📸 Analyze</button>
+                    <button class="bt" onclick="switchTab('t-cam')">📷 Full Camera</button>
+                </div>
+            </div>
+        </div>
+        <!-- Motor -->
+        <div class="cd">
+            <div class="cd-h"><div class="cd-t">⚙️ Motor</div><div class="cd-i" id="motorStatusText">Idle</div></div>
+            <div class="cd-b">
+                <div class="mot-grid">
+                    <div class="ms"><div class="ms-l">Pos</div><div class="ms-v" id="mPos">0</div></div>
+                    <div class="ms"><div class="ms-l">Steps</div><div class="ms-v" id="mTotal">—</div></div>
+                    <div class="ms"><div class="ms-l">Pot</div><div class="ms-v" id="mPot">—</div></div>
+                    <div class="ms"><div class="ms-l">State</div><div class="ms-v" id="mStatus">⚠️</div></div>
+                </div>
+                <div class="bar-w"><div class="bar-f" id="motorBar"></div></div>
+                <div class="bg2"><button class="bt" onclick="doCalibrate()">🔧 Calibrate</button><button class="bt" onclick="doHome()">🏠 Home</button></div>
+            </div>
+        </div>
+        <!-- Recent -->
+        <div class="cd">
+            <div class="cd-h"><div class="cd-t">📋 Recent Scans</div><div class="cd-i" id="historyCount">0</div></div>
+            <div class="cd-b" style="padding:12px 16px">
+                <div class="mini-hl" id="historyMini"><div class="h-empty" style="padding:18px;font-size:.78rem">No scans yet</div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== CAMERA ===== -->
+<div class="pane cam-full-pane" id="t-cam">
+    <div class="cam-full">
+        <img id="cameraFeed2" src="/video_feed" alt="Live Camera">
+        <div class="live-tag"><div class="rd"></div> LIVE FEED</div>
+        <div class="mot-tag" id="motorOv2">⏳ <span id="motorOvText2">Moving...</span></div>
+    </div>
+</div>
+
+<!-- ===== CONTROLS ===== -->
+<div class="pane detail" id="t-ctrl">
+    <div class="cd half">
+        <div class="cd-h"><div class="cd-t">🪴 Plant Pots</div></div>
+        <div class="cd-b">
+            <div class="pot-row" id="potGrid2"></div>
+            <div class="bg2">
+                <button class="bt pr f" onclick="doAutoScan()">🔄 Auto Scan All Pots</button>
+                <button class="bt" onclick="doAnalyze()">📸 Capture & Analyze</button>
+                <button class="bt" onclick="switchTab('t-cam')">📷 View Camera</button>
+            </div>
+        </div>
+    </div>
+    <div class="cd half">
+        <div class="cd-h"><div class="cd-t">⚙️ Motor Control</div><div class="cd-i" id="motorStatusText2">Idle</div></div>
+        <div class="cd-b">
+            <div class="motor-detail">
+                <div class="md-stat"><div class="md-stat-l">Position</div><div class="md-stat-v" id="mPos2">0</div></div>
+                <div class="md-stat"><div class="md-stat-l">Total Steps</div><div class="md-stat-v" id="mTotal2">—</div></div>
+                <div class="md-stat"><div class="md-stat-l">Current Pot</div><div class="md-stat-v" id="mPot2">—</div></div>
+                <div class="md-stat"><div class="md-stat-l">Status</div><div class="md-stat-v" id="mStatus2">Idle</div></div>
+            </div>
+            <div class="motor-bar"><div class="motor-bar-f" id="motorBar2"></div></div>
+            <div class="bg2"><button class="bt" onclick="doCalibrate()">🔧 Calibrate</button><button class="bt" onclick="doHome()">🏠 Home</button></div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== ANALYSIS & HISTORY ===== -->
+<div class="pane detail" id="t-ana">
+    <div class="cd half">
+        <div class="cd-h"><div class="cd-t">🌿 Leaf Analysis</div><div class="cd-i" id="analysisTime">—</div></div>
+        <div class="cd-b">
+            <div class="met-row-lg">
+                <div class="met-lg g"><div class="met-v" id="leafCount">—</div><div class="met-l">Leaves</div><div class="met-s">detected</div></div>
+                <div class="met-lg o"><div class="met-v" id="leafArea">—</div><div class="met-l">Area</div><div class="met-s">px²</div></div>
+                <div class="met-lg b"><div class="met-v" id="greenPct">—</div><div class="met-l">Green</div><div class="met-s">coverage %</div></div>
+            </div>
+            <div class="ll" id="leafList"></div>
+        </div>
+    </div>
+    <div class="cd half">
+        <div class="cd-h"><div class="cd-t">📋 Scan History</div><div class="cd-i" id="historyCount2">0 records</div></div>
+        <div class="cd-b" style="padding:14px 18px">
+            <div class="hl" id="historyList"><div class="h-empty"><div style="font-size:1.5rem;margin-bottom:8px">📭</div>No scans yet</div></div>
+        </div>
+    </div>
+</div>
+
+</div>
+
+<script>
+// ==== Tabs ====
+function switchTab(id){
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
+    const tab=document.querySelector(`[data-tab="${id}"]`),panel=document.getElementById(id);
+    if(tab)tab.classList.add('active');if(panel)panel.classList.add('active');
+    if(id==='t-dash'&&renderer)resize3D();
+}
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
+
+// ==== State ====
+const NP=2;let curPot=null,busy=false,totSteps=0,curPos=0;
+
+// ==== Three.js ====
+let scene,camera3d,renderer,cameraMesh,potMeshes=[];const RL=10;
+function resize3D(){const c=document.getElementById('sceneContainer');if(!c||!renderer)return;camera3d.aspect=c.clientWidth/c.clientHeight;camera3d.updateProjectionMatrix();renderer.setSize(c.clientWidth,c.clientHeight)}
+
+function init3D(){
+    const ct=document.getElementById('sceneContainer'),cv=document.getElementById('scene3d');
+    scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x1a1a2e,.035);
+    const w=ct.clientWidth,h=ct.clientHeight;
+    camera3d=new THREE.PerspectiveCamera(50,w/h,.1,100);camera3d.position.set(0,5.5,9);camera3d.lookAt(0,.2,0);
+    renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});renderer.setSize(w,h);renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+    scene.add(new THREE.AmbientLight(0x8899aa,.5));
+    const sun=new THREE.DirectionalLight(0xffeedd,.9);sun.position.set(6,10,6);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);scene.add(sun);
+    const p1=new THREE.PointLight(0xF26522,.4,20);p1.position.set(0,4,2);scene.add(p1);
+    const p2=new THREE.PointLight(0x22C55E,.3,12);p2.position.set(0,2,0);scene.add(p2);
+
+    const gnd=new THREE.Mesh(new THREE.PlaneGeometry(20,20),new THREE.MeshStandardMaterial({color:0x1a2332,roughness:.95}));
+    gnd.rotation.x=-Math.PI/2;gnd.position.y=-.5;gnd.receiveShadow=true;scene.add(gnd);
+    const grid=new THREE.GridHelper(16,40,0x2a3a4a,0x1a2a3a);grid.position.y=-.49;scene.add(grid);
+
+    const rm=new THREE.MeshStandardMaterial({color:0x888888,metalness:.9,roughness:.2});
+    const r1=new THREE.Mesh(new THREE.BoxGeometry(RL+1.5,.06,.12),rm);r1.position.y=1.6;r1.castShadow=true;scene.add(r1);
+    const r2=r1.clone();r2.position.z=.3;scene.add(r2);
+    [-RL/2,RL/2].forEach(x=>{const s=new THREE.Mesh(new THREE.BoxGeometry(.08,2.1,.08),new THREE.MeshStandardMaterial({color:0x555555,metalness:.7}));s.position.set(x,.55,.15);s.castShadow=true;scene.add(s)});
+
+    const cg=new THREE.Group();
+    const bd=new THREE.Mesh(new THREE.BoxGeometry(.6,.35,.5),new THREE.MeshStandardMaterial({color:0xF26522,metalness:.5,roughness:.4}));bd.castShadow=true;cg.add(bd);
+    const ln=new THREE.Mesh(new THREE.CylinderGeometry(.08,.1,.25,12),new THREE.MeshStandardMaterial({color:0x222222,metalness:.9}));ln.position.y=-.22;cg.add(ln);
+    const gl=new THREE.Mesh(new THREE.CircleGeometry(.07,12),new THREE.MeshBasicMaterial({color:0x4488ff}));gl.position.y=-.35;gl.rotation.x=-Math.PI/2;cg.add(gl);
+    const ld=new THREE.Mesh(new THREE.SphereGeometry(.03,8,8),new THREE.MeshBasicMaterial({color:0x22C55E}));ld.position.set(.2,.12,.2);cg.add(ld);
+    cg.position.set(-RL/2,1.85,.15);cameraMesh=cg;scene.add(cg);
+
+    const lc=[0x22C55E,0x16A34A,0x34D399,0x4ADE80,0x15803D];
+    for(let i=0;i<NP;i++){
+        const pg=new THREE.Group();pg.userData={potNum:i+1};
+        const sau=new THREE.Mesh(new THREE.CylinderGeometry(.7,.7,.06,20),new THREE.MeshStandardMaterial({color:0x8B6914,roughness:.8}));sau.position.y=-.47;pg.add(sau);
+        const pot=new THREE.Mesh(new THREE.CylinderGeometry(.55,.4,.75,16),new THREE.MeshStandardMaterial({color:0xC4652A,roughness:.7,metalness:.05}));pot.position.y=-.07;pot.castShadow=true;pg.add(pot);
+        const rim=new THREE.Mesh(new THREE.TorusGeometry(.55,.04,8,16),new THREE.MeshStandardMaterial({color:0xA0522D,roughness:.6}));rim.rotation.x=Math.PI/2;rim.position.y=.3;pg.add(rim);
+        const soil=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.12,16),new THREE.MeshStandardMaterial({color:0x3E2723,roughness:1}));soil.position.y=.24;pg.add(soil);
+        const stm=new THREE.Mesh(new THREE.CylinderGeometry(.025,.035,.9,8),new THREE.MeshStandardMaterial({color:0x2E7D32}));stm.position.y=.7;pg.add(stm);
+        for(let j=0;j<7;j++){
+            const lg=new THREE.SphereGeometry(.12+Math.random()*.05,8,6);lg.scale(1,.25,1.6);
+            const lf=new THREE.Mesh(lg,new THREE.MeshStandardMaterial({color:lc[j%5],roughness:.5,side:THREE.DoubleSide}));
+            const a=(j/7)*Math.PI*2+i*1.2,rd=.15+Math.random()*.2;
+            lf.position.set(Math.cos(a)*rd,.55+j*.12+Math.random()*.08,Math.sin(a)*rd);
+            lf.rotation.set(Math.random()*.4-.2,a,Math.random()*.3);lf.castShadow=true;pg.add(lf);
+        }
+        if(i===1){for(let c=0;c<3;c++){const ch=new THREE.Mesh(new THREE.CylinderGeometry(.015,.03,.15,8),new THREE.MeshStandardMaterial({color:c===0?0xEF4444:0x22C55E}));const ca=(c/3)*Math.PI*2+.5;ch.position.set(Math.cos(ca)*.15,.7+c*.1,Math.sin(ca)*.15);ch.rotation.z=.3+Math.random()*.3;pg.add(ch)}}
+        const sp=RL/(NP+1);pg.position.set(-RL/2+sp*(i+1),0,0);potMeshes.push(pg);scene.add(pg);
+        const lcc=document.createElement('canvas');lcc.width=160;lcc.height=56;const ctx=lcc.getContext('2d');
+        ctx.fillStyle='rgba(242,101,34,.85)';ctx.beginPath();ctx.roundRect(0,0,160,56,10);ctx.fill();
+        ctx.fillStyle='#fff';ctx.font='bold 24px Inter,sans-serif';ctx.textAlign='center';ctx.fillText(`🌶️ Pot ${i+1}`,80,38);
+        const ls=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(lcc)}));ls.scale.set(1.2,.45,1);ls.position.set(pg.position.x,2.4,0);scene.add(ls);
+    }
+
+    const rc=new THREE.Raycaster(),ms=new THREE.Vector2();
+    cv.addEventListener('click',e=>{const rect=cv.getBoundingClientRect();ms.x=((e.clientX-rect.left)/rect.width)*2-1;ms.y=-((e.clientY-rect.top)/rect.height)*2+1;rc.setFromCamera(ms,camera3d);for(const pg of potMeshes){if(rc.intersectObjects(pg.children,true).length>0){doScan(pg.userData.potNum);break}}});
+    cv.style.cursor='pointer';window.addEventListener('resize',resize3D);animate();
+}
+
+function animate(){
+    requestAnimationFrame(animate);const t=Date.now()*.001;
+    if(cameraMesh){const tx=totSteps>0?-RL/2+(curPos/totSteps)*RL:-RL/2;cameraMesh.position.x+=(tx-cameraMesh.position.x)*.04}
+    potMeshes.forEach((pg,i)=>{
+        pg.children[1].material.emissive=curPot===i+1?new THREE.Color(0xF26522).multiplyScalar(.12):new THREE.Color(0);
+        pg.children.forEach((ch,ci)=>{if(ci>=5&&ch.geometry?.type?.includes('Sphere'))ch.rotation.z=Math.sin(t*1.5+ci+i)*.08});
+    });
+    renderer.render(scene,camera3d);
+}
+
+// ==== Pots ====
+function initPots(){
+    ['potGrid','potGrid2'].forEach(gid=>{
+        const g=document.getElementById(gid);if(!g)return;g.innerHTML='';
+        for(let i=1;i<=NP;i++){const d=document.createElement('div');d.className='pot';d.id=`${gid}-p${i}`;
+        d.innerHTML=`<div class="pot-ico">🌶️</div><div class="pot-nm">Pot ${i}</div><div class="pot-inf" id="${gid}-i${i}">Click to scan</div>`;
+        d.addEventListener('click',()=>doScan(i));g.appendChild(d)}
+    });
+}
+
+// ==== Analysis ====
+function updateAnalysis(d){if(!d)return;
+    document.getElementById('qLeaves').textContent=d.leaf_count??'—';
+    document.getElementById('qArea').textContent=d.total_area_px?d.total_area_px.toLocaleString():'—';
+    document.getElementById('qGreen').textContent=d.green_coverage!=null?d.green_coverage.toFixed(1):'—';
+    if(d.timestamp)document.getElementById('qTime').textContent=d.timestamp.substring(11,19);
+    document.getElementById('leafCount').textContent=d.leaf_count??'—';
+    document.getElementById('leafArea').textContent=d.total_area_px?d.total_area_px.toLocaleString():'—';
+    document.getElementById('greenPct').textContent=d.green_coverage!=null?d.green_coverage.toFixed(1):'—';
+    if(d.timestamp)document.getElementById('analysisTime').textContent=d.timestamp.substring(11,19);
+    if(d.pot>0){['potGrid','potGrid2'].forEach(gid=>{const el=document.getElementById(`${gid}-i${d.pot}`);if(el){el.textContent=`${d.leaf_count} leaves · ${d.green_coverage?.toFixed(1)}%`;el.className='pot-inf ok'}})}
+    const ll=document.getElementById('leafList');
+    if(d.leaves?.length>0){ll.innerHTML=d.leaves.map((l,i)=>`<div class="li"><span class="li-n">🍃 Leaf ${i+1}</span><span class="li-d">${l.width_px}×${l.height_px} px</span><span class="li-a">${l.area_px.toLocaleString()} px²</span><span class="li-s">${l.solidity}</span></div>`).join('')}else ll.innerHTML='';
+}
+
+function updateHistory(list){
+    document.getElementById('historyCount2').textContent=`${list.length} records`;document.getElementById('historyCount').textContent=list.length;
+    const el=document.getElementById('historyList');
+    if(!list?.length){el.innerHTML='<div class="h-empty"><div style="font-size:1.4rem;margin-bottom:6px">📭</div>No scans yet</div>';document.getElementById('historyMini').innerHTML='<div class="h-empty" style="padding:16px;font-size:.75rem">No scans yet</div>';return}
+    el.innerHTML=list.slice(-15).reverse().map(h=>{const t=h.timestamp?h.timestamp.substring(11,19):'--';return`<div class="hr"><span class="hr-t">${t}</span><span class="hr-p">Pot ${h.pot}</span><span class="hr-d">${h.leaf_count} leaves · ${h.total_area_px?.toLocaleString()} px²</span><span class="hr-g">${h.green_coverage?.toFixed(1)}%</span></div>`}).join('');
+    document.getElementById('historyMini').innerHTML=list.slice(-4).reverse().map(h=>{const t=h.timestamp?h.timestamp.substring(11,19):'--';return`<div class="mini-hr"><span style="color:var(--muted)">${t}</span><span style="color:var(--orange);font-weight:700">P${h.pot}</span><span>${h.leaf_count}L · ${h.green_coverage?.toFixed(1)}%</span></div>`}).join('');
+}
+
+// ==== Toast ====
+function showToast(msg, type='ok') {
+    const wrap = document.getElementById('toastWrap');
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.textContent = (type === 'err' ? '❌ ' : type === 'warn' ? '⚠️ ' : '✅ ') + msg;
+    wrap.appendChild(t);
+    setTimeout(() => { t.style.animation = 'toastOut .3s ease forwards'; setTimeout(() => t.remove(), 300); }, 3000);
+}
+
+// ==== API ====
+async function apiPost(u) {
+    try {
+        const resp = await fetch(u, { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok || data.error) {
+            showToast(data.error || `Error ${resp.status}`, 'err');
+            return data;
+        }
+        if (data.message) showToast(data.message);
+        return data;
+    } catch (e) {
+        showToast(e.message, 'err');
+        return { error: e.message };
+    }
+}
+async function doCalibrate() { if (!busy) await apiPost('/api/calibrate'); }
+async function doHome() { if (!busy) await apiPost('/api/home'); }
+async function doScan(p) { if (!busy) await apiPost(`/api/scan/${p}`); }
+async function doAutoScan() { if (!busy) await apiPost('/api/auto_scan'); }
+async function doAnalyze() { const r = await apiPost('/api/analyze'); if (!r.error) { updateAnalysis(r); switchTab('t-ana'); } }
+
+// ==== Polling ====
+async function pollStatus(){try{
+    const s=await(await fetch('/api/status')).json();
+    document.getElementById('dotSerial').className=s.serial_connected?'dot on':'dot';
+    document.getElementById('serialText').textContent=s.serial_connected?'Connected':'Disconnected';
+    document.getElementById('dotCal').className=s.is_calibrated?'dot on':'dot';
+    document.getElementById('calText').textContent=s.is_calibrated?`Cal (${s.total_steps})`:'Not Cal';
+    document.getElementById('posText').textContent=`Pos: ${s.current_position}${s.current_pot?' · Pot '+s.current_pot:''}`;
+    busy=s.motor_busy;totSteps=s.total_steps;curPos=s.current_position;curPot=s.current_pot;
+    ['','2'].forEach(x=>{
+        const p=document.getElementById('mPos'+x);if(p)p.textContent=s.current_position;
+        const t=document.getElementById('mTotal'+x);if(t)t.textContent=s.total_steps||'—';
+        const po=document.getElementById('mPot'+x);if(po)po.textContent=s.current_pot?`Pot ${s.current_pot}`:'—';
+        const st=document.getElementById('mStatus'+x);if(st)st.textContent=s.motor_busy?'🔄':(s.is_calibrated?'✅':'⚠️');
+        const ms=document.getElementById('motorStatusText'+x);if(ms)ms.textContent=s.motor_status||(s.motor_busy?'Working...':'Idle');
+        const bar=document.getElementById('motorBar'+x);if(bar)bar.style.width=(s.total_steps>0?s.current_position/s.total_steps*100:0)+'%';
+    });
+    ['','2'].forEach(x=>{const ov=document.getElementById('motorOv'+x);if(ov){if(s.motor_busy){ov.classList.add('show');document.getElementById('motorOvText'+x).textContent=s.motor_status||'Working...'}else ov.classList.remove('show')}});
+    document.getElementById('sceneInfo').textContent=s.motor_busy?'⏳ '+(s.motor_status||'Moving...'):s.current_pot?`📍 At Pot ${s.current_pot}`:'🌿 Click a pot to scan';
+    document.querySelectorAll('.bt').forEach(b=>b.disabled=s.motor_busy);
+    if(s.last_analysis)updateAnalysis(s.last_analysis);
+    ['potGrid','potGrid2'].forEach(gid=>{for(let i=1;i<=NP;i++){const el=document.getElementById(`${gid}-p${i}`);if(el)el.classList.toggle('active',curPot===i)}});
+}catch(e){}}
+async function pollHistory(){try{updateHistory(await(await fetch('/api/history')).json())}catch(e){}}
+
+// ==== Init ====
+initPots();init3D();setInterval(pollStatus,800);setInterval(pollHistory,3000);
+</script>
+</body>
+</html>
