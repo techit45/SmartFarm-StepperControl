@@ -53,6 +53,9 @@ class AppState:
         self.hsv_low = HSV_LOW.copy()
         self.hsv_high = HSV_HIGH.copy()
         self.save_dir = "scan_results"
+        # Pump & Soil
+        self.pump_states = [False, False]
+        self.soil_values = [0, 0]
 
 state = AppState()
 
@@ -140,6 +143,8 @@ class ArduinoController:
                                 break
                     time.sleep(0.01)
                 return found, lines
+            except OSError:
+                raise  # ให้ caller จัดการ (เช่น device disconnected)
             except Exception as e:
                 print(f"  ❌ {e}")
                 return False, [str(e)]
@@ -198,6 +203,53 @@ def camera_thread_fn():
             if ret:
                 state.latest_frame = frame
         time.sleep(0.03)  # ~30fps
+
+
+def sensor_poll_fn():
+    """Background thread: อ่าน sensors จาก Arduino ทุก 2 วินาที"""
+    fail_count = 0
+    while True:
+        if state.serial_connected and not state.motor_busy:
+            try:
+                # ตรวจว่า serial ยังเปิดอยู่
+                if not state.arduino.ser or not state.arduino.ser.is_open:
+                    state.serial_connected = False
+                    fail_count = 0
+                    time.sleep(5)
+                    continue
+                ok, lines = state.arduino.send_command("sensors", "SENSORS:", timeout=3)
+                if ok:
+                    fail_count = 0
+                    for line in lines:
+                        if line.startswith("SENSORS:"):
+                            _parse_sensors(line)
+                else:
+                    fail_count += 1
+            except OSError:
+                # Device disconnected (e.g. ESP32 reset)
+                print("⚠️  Serial device lost, stopping sensor poll")
+                state.serial_connected = False
+                fail_count = 0
+            except Exception:
+                fail_count += 1
+        # หยุดพักนานขึ้นถ้า fail หลายครั้ง (ป้องกัน spam)
+        time.sleep(5 if fail_count > 3 else 2)
+
+
+def _parse_sensors(line):
+    """Parse: SENSORS:soil1=2048,soil2=1890,pump1=0,pump2=1"""
+    try:
+        data = line.split(":", 1)[1]  # soil1=2048,soil2=...
+        pairs = {}
+        for part in data.split(","):
+            k, v = part.split("=")
+            pairs[k.strip()] = int(v.strip())
+        state.soil_values[0] = pairs.get("soil1", 0)
+        state.soil_values[1] = pairs.get("soil2", 0)
+        state.pump_states[0] = pairs.get("pump1", 0) == 1
+        state.pump_states[1] = pairs.get("pump2", 0) == 1
+    except Exception:
+        pass
 
 
 def generate_mjpeg():
@@ -420,6 +472,8 @@ def api_status():
         "motor_status": state.motor_status,
         "is_scanning": state.is_scanning,
         "last_analysis": state.last_analysis,
+        "pump_states": state.pump_states,
+        "soil_values": state.soil_values,
     })
 
 @app.route('/api/calibrate', methods=['POST'])
@@ -482,6 +536,32 @@ def api_analyze():
     state.last_analysis = analysis
     return jsonify(analysis)
 
+@app.route('/api/pump/<int:pump>/<action>', methods=['POST'])
+def api_pump(pump, action):
+    if not state.serial_connected:
+        return jsonify({"error": "No serial connection"}), 400
+    if pump < 1 or pump > 2:
+        return jsonify({"error": "Pump must be 1 or 2"}), 400
+    if action not in ('on', 'off'):
+        return jsonify({"error": "Action must be on or off"}), 400
+    try:
+        ok, lines = state.arduino.send_command(f"pump {pump} {action}", "OK:", timeout=5)
+    except OSError:
+        state.serial_connected = False
+        return jsonify({"error": "Serial device lost"}), 503
+    if ok:
+        state.pump_states[pump - 1] = (action == 'on')
+        return jsonify({"ok": True, "message": f"Pump {pump} {action.upper()}"})
+    else:
+        return jsonify({"error": "Pump command failed"}), 500
+
+@app.route('/api/sensors')
+def api_sensors():
+    return jsonify({
+        "pump_states": state.pump_states,
+        "soil_values": state.soil_values,
+    })
+
 
 # ========================================
 # Main
@@ -523,6 +603,11 @@ def main():
     # Camera thread
     cam_thread = Thread(target=camera_thread_fn, daemon=True)
     cam_thread.start()
+
+    # Sensor polling thread
+    if state.serial_connected:
+        sensor_thread = Thread(target=sensor_poll_fn, daemon=True)
+        sensor_thread.start()
 
     print(f"\n🌐 Starting web server on http://localhost:{args.web_port}")
     app.run(host='0.0.0.0', port=args.web_port, debug=False, threaded=True)

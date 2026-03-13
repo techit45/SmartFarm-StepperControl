@@ -47,22 +47,24 @@
 
         /* CONTENT */
         .content{flex:1;overflow:hidden;position:relative}
-        .pane{display:none;width:100%;height:100%}.pane.active{display:flex}
+        .pane{display:none;width:100%;height:100%}
+        .pane.active{display:block;overflow-y:auto}
+        .pane.cam-full-pane.active,.pane.detail.active{display:flex}
 
         /* ===== DASHBOARD ===== */
-        .dash{padding:20px 28px;gap:20px;overflow-y:auto}
-        .dash-main{flex:1;display:flex;flex-direction:column;gap:16px;min-width:0}
-        .dash-side{width:360px;flex-shrink:0;display:flex;flex-direction:column;gap:16px}
+        .dash{padding:20px 28px}
+        .dash-hero{display:flex;gap:18px;height:44vh;min-height:260px;max-height:420px;margin-bottom:20px}
+        .dash-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding-bottom:20px}
 
         /* 3D */
-        .view3d{flex:1;min-height:300px;position:relative;border-radius:var(--r);overflow:hidden;background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);box-shadow:var(--sh-lg);border:1px solid var(--border)}
+        .view3d{flex:2;min-width:0;position:relative;border-radius:var(--r);overflow:hidden;background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);box-shadow:var(--sh-lg);border:1px solid var(--border)}
         #scene3d{width:100%;height:100%;display:block}
         .badges{position:absolute;bottom:14px;left:14px;display:flex;gap:6px}
-        .bdg{padding:5px 14px;background:rgba(255,255,255,.12);backdrop-filter:blur(8px);border-radius:8px;font-size:.7rem;color:#fff;border:1px solid rgba(255,255,255,.15)}
+        .bdg{padding:6px 16px;background:rgba(255,255,255,.12);backdrop-filter:blur(8px);border-radius:8px;font-size:.72rem;color:#fff;border:1px solid rgba(255,255,255,.15)}
         .bdg.ora{background:rgba(242,101,34,.35);border-color:rgba(242,101,34,.5)}
 
         /* Camera mini */
-        .cam-mini{height:200px;flex-shrink:0;position:relative;border-radius:var(--r);overflow:hidden;background:#111;box-shadow:var(--sh-md);border:1px solid var(--border)}
+        .cam-mini{flex:1;min-width:0;position:relative;border-radius:var(--r);overflow:hidden;background:#111;box-shadow:var(--sh-md);border:1px solid var(--border)}
         .cam-mini img{width:100%;height:100%;object-fit:cover}
         .live-tag{position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:6px;padding:5px 12px;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border-radius:8px;font-size:.7rem;color:#fff}
         .live-tag .rd{width:7px;height:7px;border-radius:50%;background:var(--red);animation:bk 1.2s infinite}
@@ -72,37 +74,37 @@
 
         /* CARD */
         .cd{background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--sh-sm);overflow:hidden}
-        .cd-h{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border-lt);background:linear-gradient(180deg,var(--bg) 0%,var(--card) 100%)}
-        .cd-t{font-size:.76rem;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--txt2);display:flex;align-items:center;gap:6px}
+        .cd-h{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border-lt);background:linear-gradient(180deg,var(--bg) 0%,var(--card) 100%)}
+        .cd-t{font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--txt2);display:flex;align-items:center;gap:6px}
         .cd-i{font-size:.62rem;color:var(--muted)}
-        .cd-b{padding:18px}
+        .cd-b{padding:14px 16px}
 
         /* Metrics */
         .met-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-        .met{text-align:center;padding:16px 8px 12px;border-radius:var(--rs);background:var(--bg);border:1px solid var(--border)}
+        .met{text-align:center;padding:14px 8px 10px;border-radius:var(--rs);background:var(--bg);border:1px solid var(--border)}
         .met.g{background:var(--green-bg);border-color:var(--green-bdr)}
         .met.o{background:var(--orange-pale);border-color:rgba(242,101,34,.15)}
         .met.b{background:var(--blue-bg);border-color:rgba(59,130,246,.15)}
-        .met-v{font-size:1.5rem;font-weight:800;line-height:1}
+        .met-v{font-size:1.4rem;font-weight:800;line-height:1}
         .met.g .met-v{color:var(--green)}.met.o .met-v{color:var(--orange)}.met.b .met-v{color:var(--blue)}
-        .met-l{font-size:.6rem;font-weight:600;color:var(--muted);text-transform:uppercase;margin-top:6px;letter-spacing:.4px}
+        .met-l{font-size:.58rem;font-weight:600;color:var(--muted);text-transform:uppercase;margin-top:5px;letter-spacing:.4px}
 
         /* Pots */
-        .pot-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-        .pot{padding:20px 14px;border-radius:var(--rs);border:2px solid var(--border);background:var(--bg);text-align:center;cursor:pointer;transition:all .25s;position:relative;overflow:hidden}
+        .pot-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        .pot{padding:16px 12px;border-radius:var(--rs);border:2px solid var(--border);background:var(--bg);text-align:center;cursor:pointer;transition:all .25s;position:relative;overflow:hidden}
         .pot::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--border);transition:background .25s}
         .pot:hover{border-color:var(--orange);transform:translateY(-2px);box-shadow:0 6px 18px rgba(242,101,34,.12)}
         .pot:hover::before{background:var(--orange)}
         .pot.active{border-color:var(--orange);background:var(--orange-pale)}
         .pot.active::before{background:var(--orange)}
-        .pot-ico{font-size:1.8rem;margin-bottom:4px}
-        .pot-nm{font-size:.85rem;font-weight:700}
-        .pot-inf{font-size:.65rem;color:var(--muted);margin-top:4px;line-height:1.4}
+        .pot-ico{font-size:1.6rem;margin-bottom:3px}
+        .pot-nm{font-size:.82rem;font-weight:700}
+        .pot-inf{font-size:.62rem;color:var(--muted);margin-top:3px;line-height:1.3}
         .pot-inf.ok{color:var(--green);font-weight:500}
 
         /* Buttons */
-        .bg2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
-        .bt{padding:11px 10px;border:1px solid var(--border);border-radius:var(--rs);background:var(--bg);color:var(--txt);font-family:inherit;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:5px}
+        .bg2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+        .bt{padding:10px 10px;border:1px solid var(--border);border-radius:var(--rs);background:var(--bg);color:var(--txt);font-family:inherit;font-size:.75rem;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:5px}
         .bt:hover{background:var(--orange-pale);border-color:var(--orange);color:var(--orange);transform:translateY(-1px)}
         .bt:active{transform:scale(.97)}
         .bt.pr{background:linear-gradient(135deg,var(--orange),var(--orange-l));color:#fff;border-color:var(--orange);box-shadow:0 3px 10px rgba(242,101,34,.28)}
@@ -113,10 +115,11 @@
         /* Motor */
         .mot-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
         .ms{padding:10px 6px;border-radius:8px;background:var(--bg);border:1px solid var(--border);text-align:center}
-        .ms-l{font-size:.58rem;color:var(--muted);text-transform:uppercase;font-weight:600}
-        .ms-v{font-size:.9rem;font-weight:700;margin-top:3px}
+        .ms-l{font-size:.56rem;color:var(--muted);text-transform:uppercase;font-weight:600}
+        .ms-v{font-size:.88rem;font-weight:700;margin-top:3px}
         .bar-w{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:10px}
         .bar-f{height:100%;background:linear-gradient(90deg,var(--orange),var(--orange-l));border-radius:3px;transition:width .5s;width:0%}
+
 
         /* ===== CAMERA FULL ===== */
         .cam-full-pane{flex-direction:column;padding:0}
@@ -172,6 +175,28 @@
         .toast.warn{background:linear-gradient(135deg,var(--orange),var(--orange-d))}
         @keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
         @keyframes toastOut{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(40px)}}
+
+        /* Soil Moisture */
+        .soil-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        .soil-item{padding:14px 10px;border-radius:var(--rs);border:1px solid var(--border);background:var(--bg);text-align:center}
+        .soil-label{font-size:.62rem;font-weight:600;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+        .soil-val{font-size:1.5rem;font-weight:800;color:var(--blue)}
+        .soil-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:8px}
+        .soil-bar-f{height:100%;border-radius:3px;transition:width .6s,background .4s}
+        .soil-raw{font-size:.58rem;color:var(--muted);margin-top:5px}
+
+        /* Pump Control */
+        .pump-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        .pump-item{padding:16px 10px;border-radius:var(--rs);border:2px solid var(--border);background:var(--bg);text-align:center;transition:all .25s}
+        .pump-item.on{border-color:var(--blue);background:var(--blue-bg)}
+        .pump-label{font-size:.68rem;font-weight:600;color:var(--txt2);margin-bottom:4px}
+        .pump-led{width:10px;height:10px;border-radius:50%;background:var(--muted);display:inline-block;margin-bottom:6px;transition:all .3s}
+        .pump-led.on{background:var(--green);box-shadow:0 0 8px rgba(34,197,94,.6)}
+        .pump-btn{padding:8px 18px;border:1px solid var(--border);border-radius:8px;background:var(--white);color:var(--txt);font-family:inherit;font-size:.75rem;font-weight:600;cursor:pointer;transition:all .2s;margin-top:6px}
+        .pump-btn:hover{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
+        .pump-btn.off{background:linear-gradient(135deg,var(--red),#DC2626);color:#fff;border-color:var(--red)}
+        .pump-btn.off:hover{background:linear-gradient(135deg,#DC2626,#B91C1C)}
+        .pump-btn:disabled{opacity:.4;cursor:not-allowed}
     </style>
 </head>
 <body>
@@ -202,7 +227,8 @@
 
 <!-- ===== DASHBOARD ===== -->
 <div class="pane dash active" id="t-dash">
-    <div class="dash-main">
+    <!-- Top: 3D + Camera side by side -->
+    <div class="dash-hero">
         <div class="view3d" id="sceneContainer">
             <canvas id="scene3d"></canvas>
             <div class="badges">
@@ -216,8 +242,9 @@
             <div class="mot-tag" id="motorOv">⏳ <span id="motorOvText">Moving...</span></div>
         </div>
     </div>
-    <div class="dash-side">
-        <!-- Metrics -->
+    <!-- Cards Grid: 3 columns -->
+    <div class="dash-cards">
+        <!-- Leaf Analysis -->
         <div class="cd">
             <div class="cd-h"><div class="cd-t">🌿 Leaf Analysis</div><div class="cd-i" id="qTime">—</div></div>
             <div class="cd-b">
@@ -228,7 +255,7 @@
                 </div>
             </div>
         </div>
-        <!-- Pots -->
+        <!-- Plant Pots -->
         <div class="cd">
             <div class="cd-h"><div class="cd-t">🪴 Plant Pots</div></div>
             <div class="cd-b">
@@ -254,7 +281,21 @@
                 <div class="bg2"><button class="bt" onclick="doCalibrate()">🔧 Calibrate</button><button class="bt" onclick="doHome()">🏠 Home</button></div>
             </div>
         </div>
-        <!-- Recent -->
+        <!-- Soil Moisture -->
+        <div class="cd">
+            <div class="cd-h"><div class="cd-t">💧 Soil Moisture</div><div class="cd-i">Real-time</div></div>
+            <div class="cd-b">
+                <div class="soil-row" id="soilGrid"></div>
+            </div>
+        </div>
+        <!-- Pump Control -->
+        <div class="cd">
+            <div class="cd-h"><div class="cd-t">🚰 Water Pumps</div></div>
+            <div class="cd-b">
+                <div class="pump-row" id="pumpGrid"></div>
+            </div>
+        </div>
+        <!-- Recent Scans -->
         <div class="cd">
             <div class="cd-h"><div class="cd-t">📋 Recent Scans</div><div class="cd-i" id="historyCount">0</div></div>
             <div class="cd-b" style="padding:12px 16px">
@@ -297,6 +338,18 @@
             </div>
             <div class="motor-bar"><div class="motor-bar-f" id="motorBar2"></div></div>
             <div class="bg2"><button class="bt" onclick="doCalibrate()">🔧 Calibrate</button><button class="bt" onclick="doHome()">🏠 Home</button></div>
+        </div>
+    </div>
+    <div class="cd half">
+        <div class="cd-h"><div class="cd-t">💧 Soil Moisture</div></div>
+        <div class="cd-b">
+            <div class="soil-row" id="soilGrid2"></div>
+        </div>
+    </div>
+    <div class="cd half">
+        <div class="cd-h"><div class="cd-t">🚰 Water Pump Control</div></div>
+        <div class="cd-b">
+            <div class="pump-row" id="pumpGrid2"></div>
         </div>
     </div>
 </div>
@@ -473,6 +526,79 @@ async function doScan(p) { if (!busy) await apiPost(`/api/scan/${p}`); }
 async function doAutoScan() { if (!busy) await apiPost('/api/auto_scan'); }
 async function doAnalyze() { const r = await apiPost('/api/analyze'); if (!r.error) { updateAnalysis(r); switchTab('t-ana'); } }
 
+// ==== Soil & Pump Init ====
+function initSoilPump(){
+    ['soilGrid','soilGrid2'].forEach(gid=>{
+        const g=document.getElementById(gid);if(!g)return;g.innerHTML='';
+        for(let i=1;i<=NP;i++){
+            const d=document.createElement('div');d.className='soil-item';d.id=`${gid}-s${i}`;
+            d.innerHTML=`<div class="soil-label">🪴 Pot ${i}</div><div class="soil-val" id="${gid}-v${i}">—</div><div class="soil-bar"><div class="soil-bar-f" id="${gid}-b${i}"></div></div><div class="soil-raw" id="${gid}-r${i}">raw: —</div>`;
+            g.appendChild(d)
+        }
+    });
+    ['pumpGrid','pumpGrid2'].forEach(gid=>{
+        const g=document.getElementById(gid);if(!g)return;g.innerHTML='';
+        for(let i=1;i<=NP;i++){
+            const d=document.createElement('div');d.className='pump-item';d.id=`${gid}-p${i}`;
+            d.innerHTML=`<div class="pump-led" id="${gid}-led${i}"></div><div class="pump-label">🚰 Pump ${i}</div><button class="pump-btn" id="${gid}-btn${i}" onclick="togglePump(${i})">OFF</button>`;
+            g.appendChild(d)
+        }
+    });
+}
+
+function getSoilPercent(raw){
+    // ESP32 Analog: 4095=แห้ง (0%), 0=เปียก (100%)
+    return Math.max(0,Math.min(100, ((4095-raw)/4095)*100));
+}
+
+function getSoilColor(pct){
+    if(pct>=60) return '#22C55E';  // ดี
+    if(pct>=30) return '#F59E0B';  // พอใช้
+    return '#EF4444';               // แห้งเกินไป
+}
+
+function updateSoilUI(soilValues){
+    if(!soilValues) return;
+    ['soilGrid','soilGrid2'].forEach(gid=>{
+        for(let i=0;i<NP;i++){
+            const raw=soilValues[i]||0;
+            const pct=getSoilPercent(raw);
+            const color=getSoilColor(pct);
+            const vel=document.getElementById(`${gid}-v${i+1}`);
+            const bar=document.getElementById(`${gid}-b${i+1}`);
+            const rawEl=document.getElementById(`${gid}-r${i+1}`);
+            if(vel)vel.textContent=pct.toFixed(0)+'%';
+            if(vel)vel.style.color=color;
+            if(bar){bar.style.width=pct+'%';bar.style.background=color}
+            if(rawEl)rawEl.textContent=`raw: ${raw} / 4095`;
+        }
+    });
+}
+
+function updatePumpUI(pumpStates){
+    if(!pumpStates) return;
+    ['pumpGrid','pumpGrid2'].forEach(gid=>{
+        for(let i=0;i<NP;i++){
+            const isOn=pumpStates[i];
+            const item=document.getElementById(`${gid}-p${i+1}`);
+            const led=document.getElementById(`${gid}-led${i+1}`);
+            const btn=document.getElementById(`${gid}-btn${i+1}`);
+            if(item)item.className='pump-item'+(isOn?' on':'');
+            if(led)led.className='pump-led'+(isOn?' on':'');
+            if(btn){btn.textContent=isOn?'🟢 ON':'⚪ OFF';btn.className='pump-btn'+(isOn?' off':'')}
+        }
+    });
+}
+
+async function togglePump(n){
+    const idx=n-1;
+    const currentlyOn=pumpStatesLocal[idx]||false;
+    const action=currentlyOn?'off':'on';
+    await apiPost(`/api/pump/${n}/${action}`);
+}
+
+let pumpStatesLocal=[false,false];
+
 // ==== Polling ====
 async function pollStatus(){try{
     const s=await(await fetch('/api/status')).json();
@@ -482,6 +608,7 @@ async function pollStatus(){try{
     document.getElementById('calText').textContent=s.is_calibrated?`Cal (${s.total_steps})`:'Not Cal';
     document.getElementById('posText').textContent=`Pos: ${s.current_position}${s.current_pot?' · Pot '+s.current_pot:''}`;
     busy=s.motor_busy;totSteps=s.total_steps;curPos=s.current_position;curPot=s.current_pot;
+    pumpStatesLocal=s.pump_states||[false,false];
     ['','2'].forEach(x=>{
         const p=document.getElementById('mPos'+x);if(p)p.textContent=s.current_position;
         const t=document.getElementById('mTotal'+x);if(t)t.textContent=s.total_steps||'—';
@@ -495,11 +622,14 @@ async function pollStatus(){try{
     document.querySelectorAll('.bt').forEach(b=>b.disabled=s.motor_busy);
     if(s.last_analysis)updateAnalysis(s.last_analysis);
     ['potGrid','potGrid2'].forEach(gid=>{for(let i=1;i<=NP;i++){const el=document.getElementById(`${gid}-p${i}`);if(el)el.classList.toggle('active',curPot===i)}});
+    // Soil & Pump
+    updateSoilUI(s.soil_values);
+    updatePumpUI(s.pump_states);
 }catch(e){}}
 async function pollHistory(){try{updateHistory(await(await fetch('/api/history')).json())}catch(e){}}
 
 // ==== Init ====
-initPots();init3D();setInterval(pollStatus,800);setInterval(pollHistory,3000);
+initPots();initSoilPump();init3D();setInterval(pollStatus,800);setInterval(pollHistory,3000);
 </script>
 </body>
 </html>
