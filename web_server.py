@@ -19,9 +19,10 @@ from flask import Flask, render_template, Response, jsonify, request
 # ========================================
 # Config
 # ========================================
-MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "best.pt")
+ROBOFLOW_API_URL = "https://serverless.roboflow.com"
+ROBOFLOW_API_KEY = "Ksay4RIzfwPVdiypEBr2"
+ROBOFLOW_MODEL_ID = "plant-deficiency-2/1"
 CONFIDENCE_THRESHOLD = 0.25
-IOU_THRESHOLD = 0.45
 NUM_POTS = 2
 
 # Flask — ใช้ path ของไฟล์นี้เป็นฐาน (ไม่ขึ้นกับ CWD)
@@ -31,31 +32,26 @@ app = Flask(__name__,
             template_folder=os.path.join(BASE_DIR, 'templates'))
 
 # ========================================
-# YOLO Model
+# Roboflow Inference Client
 # ========================================
-yolo_model = None
+rf_client = None
 
-def load_yolo_model():
-    """โหลด YOLO model จาก best.pt"""
-    global yolo_model
+def init_roboflow():
+    """เชื่อมต่อ Roboflow Inference API"""
+    global rf_client
     try:
-        from ultralytics import YOLO
-        if not os.path.exists(MODEL_PATH):
-            print(f"❌ Model file not found: {MODEL_PATH}")
-            print(f"   กรุณาวาง best.pt ไว้ใน {BASE_DIR}")
-            return False
-        print(f"🤖 Loading YOLO model: {MODEL_PATH}")
-        yolo_model = YOLO(MODEL_PATH)
-        # Warm up with dummy image
-        dummy = np.zeros((640, 640, 3), dtype=np.uint8)
-        yolo_model.predict(dummy, verbose=False)
-        print(f"✅ YOLO model loaded — classes: {yolo_model.names}")
+        from inference_sdk import InferenceHTTPClient
+        rf_client = InferenceHTTPClient(
+            api_url=ROBOFLOW_API_URL,
+            api_key=ROBOFLOW_API_KEY
+        )
+        print(f"✅ Roboflow client initialized — model: {ROBOFLOW_MODEL_ID}")
         return True
     except ImportError:
-        print("❌ ultralytics not installed! Run: pip install ultralytics")
+        print("❌ inference-sdk not installed! Run: pip install inference-sdk")
         return False
     except Exception as e:
-        print(f"❌ YOLO load error: {e}")
+        print(f"❌ Roboflow init error: {e}")
         return False
 
 # ========================================
@@ -200,49 +196,66 @@ def get_class_color(class_id):
     return CLASS_COLORS[class_id % len(CLASS_COLORS)]
 
 def analyze_frame(frame):
-    """วิเคราะห์ frame ด้วย YOLO model"""
-    if yolo_model is None:
+    """วิเคราะห์ frame ด้วย Roboflow Inference API"""
+    if rf_client is None:
         return {
             "detection_count": 0,
             "detections": [],
             "class_summary": {},
-            "error": "Model not loaded"
+            "error": "Roboflow client not initialized"
         }
 
-    results = yolo_model.predict(
-        frame,
-        conf=CONFIDENCE_THRESHOLD,
-        iou=IOU_THRESHOLD,
-        verbose=False
-    )
+    try:
+        # Encode frame เป็น JPEG bytes แล้วส่งไป Roboflow
+        _, jpeg_buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        import base64
+        img_b64 = base64.b64encode(jpeg_buf.tobytes()).decode('utf-8')
+
+        result = rf_client.infer(img_b64, model_id=ROBOFLOW_MODEL_ID)
+    except Exception as e:
+        print(f"  ❌ Roboflow infer error: {e}")
+        return {
+            "detection_count": 0,
+            "detections": [],
+            "class_summary": {},
+            "error": str(e)
+        }
 
     detections = []
     class_counts = {}
+    predictions = result.get("predictions", []) if isinstance(result, dict) else []
 
-    if results and len(results) > 0:
-        result = results[0]
-        boxes = result.boxes
+    for pred in predictions:
+        conf = float(pred.get("confidence", 0))
+        if conf < CONFIDENCE_THRESHOLD:
+            continue
 
-        for box in boxes:
-            cls_id = int(box.cls[0])
-            cls_name = result.names[cls_id]
-            conf = float(box.conf[0])
-            x1, y1, x2, y2 = box.xyxy[0].tolist()
+        cls_name = pred.get("class", "unknown")
+        cls_id = pred.get("class_id", 0)
+        # Roboflow ให้ x,y เป็น center + width,height
+        cx = float(pred.get("x", 0))
+        cy = float(pred.get("y", 0))
+        w = float(pred.get("width", 0))
+        h = float(pred.get("height", 0))
+        x1 = int(cx - w / 2)
+        y1 = int(cy - h / 2)
+        x2 = int(cx + w / 2)
+        y2 = int(cy + h / 2)
 
-            detections.append({
-                "class": cls_name,
-                "class_id": cls_id,
-                "confidence": round(conf, 3),
-                "bbox": {
-                    "x1": int(x1), "y1": int(y1),
-                    "x2": int(x2), "y2": int(y2),
-                    "width": int(x2 - x1),
-                    "height": int(y2 - y1),
-                },
-                "area_px": int((x2 - x1) * (y2 - y1)),
-            })
+        detections.append({
+            "class": cls_name,
+            "class_id": cls_id,
+            "confidence": round(conf, 3),
+            "bbox": {
+                "x1": x1, "y1": y1,
+                "x2": x2, "y2": y2,
+                "width": int(w),
+                "height": int(h),
+            },
+            "area_px": int(w * h),
+        })
 
-            class_counts[cls_name] = class_counts.get(cls_name, 0) + 1
+        class_counts[cls_name] = class_counts.get(cls_name, 0) + 1
 
     avg_conf = round(
         sum(d["confidence"] for d in detections) / len(detections), 3
@@ -350,15 +363,15 @@ def _parse_sensors(line):
 
 
 def generate_mjpeg():
-    """MJPEG stream พร้อม YOLO bounding box overlay"""
+    """MJPEG stream — Roboflow จะถูกเรียกเฉพาะตอน scan/analyze เท่านั้น
+    ไม่เรียกทุก frame เพราะเป็น cloud API (จะช้าและเสีย quota)"""
     while True:
         if state.latest_frame is not None:
             frame = state.latest_frame.copy()
 
-            # ถ้า model โหลดแล้ว → รัน YOLO
-            if yolo_model is not None:
-                analysis = analyze_frame(frame)
-                frame = draw_detections(frame, analysis.get("detections", []))
+            # วาด detection ล่าสุดถ้ามี (จาก last_analysis)
+            if state.last_analysis and state.last_analysis.get("detections"):
+                frame = draw_detections(frame, state.last_analysis["detections"])
 
             _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
             yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
@@ -692,20 +705,23 @@ def main():
     parser.add_argument("--web-port", type=int, default=8080)
     parser.add_argument("--no-serial", action="store_true")
     parser.add_argument("--save-dir", type=str, default="scan_results")
-    parser.add_argument("--model", type=str, default=None, help="Path to YOLO model (best.pt)")
     parser.add_argument("--confidence", type=float, default=0.25, help="Detection confidence threshold")
+    parser.add_argument("--model-id", type=str, default=None, help="Roboflow model ID (e.g. plant-deficiency-2/1)")
+    parser.add_argument("--api-key", type=str, default=None, help="Roboflow API key")
     args = parser.parse_args()
 
-    global MODEL_PATH, CONFIDENCE_THRESHOLD
-    if args.model:
-        MODEL_PATH = args.model
+    global CONFIDENCE_THRESHOLD, ROBOFLOW_MODEL_ID, ROBOFLOW_API_KEY
     CONFIDENCE_THRESHOLD = args.confidence
+    if args.model_id:
+        ROBOFLOW_MODEL_ID = args.model_id
+    if args.api_key:
+        ROBOFLOW_API_KEY = args.api_key
     state.save_dir = args.save_dir
 
-    # Load YOLO model
-    state.model_loaded = load_yolo_model()
-    if state.model_loaded and yolo_model:
-        state.model_classes = dict(yolo_model.names)
+    # Init Roboflow
+    state.model_loaded = init_roboflow()
+    if state.model_loaded:
+        state.model_classes = {"model": ROBOFLOW_MODEL_ID}
 
     # Serial
     if not args.no_serial:

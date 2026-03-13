@@ -3,4 +3,4 @@ opencv-python>=4.8.0
 numpy>=1.24.0
 pyserial>=3.5
 flask>=3.0.0
-ultralytics>=8.0.0
+inference-sdk>=0.9.0
