@@ -572,6 +572,7 @@ def api_status():
         "soil_values": state.soil_values,
         "model_loaded": state.model_loaded,
         "model_classes": state.model_classes,
+        "confidence_threshold": CONFIDENCE_THRESHOLD,
     })
 
 @app.route('/api/calibrate', methods=['POST'])
@@ -654,6 +655,23 @@ def api_pump(pump, action):
         return jsonify({"ok": True, "message": f"Pump {pump} {action.upper()}"})
     else:
         return jsonify({"error": "Pump command failed"}), 500
+
+@app.route('/api/confidence', methods=['POST'])
+def api_confidence():
+    global CONFIDENCE_THRESHOLD
+    data = request.get_json(silent=True) or {}
+    val = data.get('confidence')
+    if val is None:
+        return jsonify({"error": "Missing 'confidence' value"}), 400
+    try:
+        val = float(val)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid confidence value"}), 400
+    if val < 0.01 or val > 1.0:
+        return jsonify({"error": "Confidence must be between 0.01 and 1.0"}), 400
+    CONFIDENCE_THRESHOLD = val
+    print(f"🎯 Confidence threshold set to {val:.0%}")
+    return jsonify({"ok": True, "confidence": val, "message": f"Confidence set to {val:.0%}"})
 
 @app.route('/api/sensors')
 def api_sensors():

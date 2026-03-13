@@ -353,6 +353,31 @@
             <div class="pump-row" id="pumpGrid2"></div>
         </div>
     </div>
+    <div class="cd half">
+        <div class="cd-h"><div class="cd-t">🎯 Detection Settings</div></div>
+        <div class="cd-b">
+            <div style="margin-bottom:14px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span style="font-size:.78rem;font-weight:600;color:var(--txt2)">Confidence Threshold</span>
+                    <span id="confValue" style="font-size:1.1rem;font-weight:800;color:var(--orange)">25%</span>
+                </div>
+                <input type="range" id="confSlider" min="1" max="100" value="25"
+                    style="width:100%;accent-color:var(--orange);cursor:pointer;height:6px"
+                    oninput="onConfSliderInput(this.value)"
+                    onchange="onConfSliderChange(this.value)">
+                <div style="display:flex;justify-content:space-between;font-size:.6rem;color:var(--muted);margin-top:4px">
+                    <span>1% (More detections)</span>
+                    <span>100% (Strict)</span>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="bt" onclick="setConfidence(10)">10%</button>
+                <button class="bt" onclick="setConfidence(25)">25%</button>
+                <button class="bt" onclick="setConfidence(50)">50%</button>
+                <button class="bt" onclick="setConfidence(75)">75%</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- ===== ANALYSIS & HISTORY ===== -->
@@ -545,6 +570,30 @@ async function doScan(p) { if (!busy) await apiPost(`/api/scan/${p}`); }
 async function doAutoScan() { if (!busy) await apiPost('/api/auto_scan'); }
 async function doAnalyze() { const r = await apiPost('/api/analyze'); if (!r.error) { updateAnalysis(r); switchTab('t-ana'); } }
 
+// ==== Confidence Slider ====
+let confSynced = false;
+function onConfSliderInput(val) {
+    document.getElementById('confValue').textContent = val + '%';
+}
+async function onConfSliderChange(val) {
+    const v = parseInt(val) / 100;
+    try {
+        const resp = await fetch('/api/confidence', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({confidence: v})
+        });
+        const data = await resp.json();
+        if (data.ok) showToast(`Confidence: ${val}%`);
+        else showToast(data.error || 'Failed', 'err');
+    } catch(e) { showToast(e.message, 'err'); }
+}
+function setConfidence(pct) {
+    document.getElementById('confSlider').value = pct;
+    document.getElementById('confValue').textContent = pct + '%';
+    onConfSliderChange(pct);
+}
+
 // ==== Soil & Pump Init ====
 function initSoilPump(){
     ['soilGrid','soilGrid2'].forEach(gid=>{
@@ -644,6 +693,13 @@ async function pollStatus(){try{
     // Soil & Pump
     updateSoilUI(s.soil_values);
     updatePumpUI(s.pump_states);
+    // Sync confidence slider (once)
+    if(!confSynced && s.confidence_threshold){
+        const pct = Math.round(s.confidence_threshold * 100);
+        document.getElementById('confSlider').value = pct;
+        document.getElementById('confValue').textContent = pct + '%';
+        confSynced = true;
+    }
 }catch(e){}}
 async function pollHistory(){try{updateHistory(await(await fetch('/api/history')).json())}catch(e){}}
 
