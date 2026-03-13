@@ -244,15 +244,16 @@
     </div>
     <!-- Cards Grid: 3 columns -->
     <div class="dash-cards">
-        <!-- Leaf Analysis -->
+        <!-- Object Detection -->
         <div class="cd">
-            <div class="cd-h"><div class="cd-t">🌿 Leaf Analysis</div><div class="cd-i" id="qTime">—</div></div>
+            <div class="cd-h"><div class="cd-t">🔍 Object Detection</div><div class="cd-i" id="qTime">—</div></div>
             <div class="cd-b">
                 <div class="met-row">
-                    <div class="met g"><div class="met-v" id="qLeaves">—</div><div class="met-l">Leaves</div></div>
-                    <div class="met o"><div class="met-v" id="qArea">—</div><div class="met-l">Area px²</div></div>
-                    <div class="met b"><div class="met-v" id="qGreen">—</div><div class="met-l">Green %</div></div>
+                    <div class="met g"><div class="met-v" id="qDetCount">—</div><div class="met-l">Detected</div></div>
+                    <div class="met o"><div class="met-v" id="qClasses">—</div><div class="met-l">Classes</div></div>
+                    <div class="met b"><div class="met-v" id="qConf">—</div><div class="met-l">Confidence</div></div>
                 </div>
+                <div id="qClassSummary" style="margin-top:10px;font-size:.72rem;color:var(--txt2)"></div>
             </div>
         </div>
         <!-- Plant Pots -->
@@ -357,14 +358,15 @@
 <!-- ===== ANALYSIS & HISTORY ===== -->
 <div class="pane detail" id="t-ana">
     <div class="cd half">
-        <div class="cd-h"><div class="cd-t">🌿 Leaf Analysis</div><div class="cd-i" id="analysisTime">—</div></div>
+        <div class="cd-h"><div class="cd-t">🔍 Object Detection</div><div class="cd-i" id="analysisTime">—</div></div>
         <div class="cd-b">
             <div class="met-row-lg">
-                <div class="met-lg g"><div class="met-v" id="leafCount">—</div><div class="met-l">Leaves</div><div class="met-s">detected</div></div>
-                <div class="met-lg o"><div class="met-v" id="leafArea">—</div><div class="met-l">Area</div><div class="met-s">px²</div></div>
-                <div class="met-lg b"><div class="met-v" id="greenPct">—</div><div class="met-l">Green</div><div class="met-s">coverage %</div></div>
+                <div class="met-lg g"><div class="met-v" id="detCount">—</div><div class="met-l">Detected</div><div class="met-s">objects</div></div>
+                <div class="met-lg o"><div class="met-v" id="detClasses">—</div><div class="met-l">Classes</div><div class="met-s">types</div></div>
+                <div class="met-lg b"><div class="met-v" id="detConf">—</div><div class="met-l">Avg Conf.</div><div class="met-s">confidence</div></div>
             </div>
-            <div class="ll" id="leafList"></div>
+            <div id="classSummaryLg" style="margin-top:14px"></div>
+            <div class="ll" id="detectionList"></div>
         </div>
     </div>
     <div class="cd half">
@@ -473,25 +475,42 @@ function initPots(){
 
 // ==== Analysis ====
 function updateAnalysis(d){if(!d)return;
-    document.getElementById('qLeaves').textContent=d.leaf_count??'—';
-    document.getElementById('qArea').textContent=d.total_area_px?d.total_area_px.toLocaleString():'—';
-    document.getElementById('qGreen').textContent=d.green_coverage!=null?d.green_coverage.toFixed(1):'—';
+    const cnt=d.detection_count??0;
+    const cls=d.class_summary?Object.keys(d.class_summary).length:0;
+    const conf=d.avg_confidence??(0);
+    // Dashboard card
+    document.getElementById('qDetCount').textContent=cnt;
+    document.getElementById('qClasses').textContent=cls;
+    document.getElementById('qConf').textContent=conf>0?(conf*100).toFixed(0)+'%':'—';
     if(d.timestamp)document.getElementById('qTime').textContent=d.timestamp.substring(11,19);
-    document.getElementById('leafCount').textContent=d.leaf_count??'—';
-    document.getElementById('leafArea').textContent=d.total_area_px?d.total_area_px.toLocaleString():'—';
-    document.getElementById('greenPct').textContent=d.green_coverage!=null?d.green_coverage.toFixed(1):'—';
+    // Class summary in dashboard card
+    const qcs=document.getElementById('qClassSummary');
+    if(d.class_summary&&Object.keys(d.class_summary).length>0){
+        qcs.innerHTML=Object.entries(d.class_summary).map(([k,v])=>`<span style="display:inline-block;padding:3px 10px;margin:2px 4px 2px 0;border-radius:6px;background:var(--green-bg);border:1px solid var(--green-bdr);font-weight:600;color:var(--green)">${k}: ${v}</span>`).join('');
+    }else qcs.innerHTML='';
+    // Analysis detail tab
+    document.getElementById('detCount').textContent=cnt;
+    document.getElementById('detClasses').textContent=cls;
+    document.getElementById('detConf').textContent=conf>0?(conf*100).toFixed(0)+'%':'—';
     if(d.timestamp)document.getElementById('analysisTime').textContent=d.timestamp.substring(11,19);
-    if(d.pot>0){['potGrid','potGrid2'].forEach(gid=>{const el=document.getElementById(`${gid}-i${d.pot}`);if(el){el.textContent=`${d.leaf_count} leaves · ${d.green_coverage?.toFixed(1)}%`;el.className='pot-inf ok'}})}
-    const ll=document.getElementById('leafList');
-    if(d.leaves?.length>0){ll.innerHTML=d.leaves.map((l,i)=>`<div class="li"><span class="li-n">🍃 Leaf ${i+1}</span><span class="li-d">${l.width_px}×${l.height_px} px</span><span class="li-a">${l.area_px.toLocaleString()} px²</span><span class="li-s">${l.solidity}</span></div>`).join('')}else ll.innerHTML='';
+    // Per-class summary (large)
+    const csl=document.getElementById('classSummaryLg');
+    if(d.class_summary&&Object.keys(d.class_summary).length>0){
+        csl.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:8px">'+Object.entries(d.class_summary).map(([k,v])=>`<div style="padding:8px 16px;border-radius:var(--rs);background:var(--green-bg);border:1px solid var(--green-bdr);font-size:.82rem"><span style="font-weight:700;color:var(--green)">${v}</span> <span style="color:var(--txt2)">${k}</span></div>`).join('')+'</div>';
+    }else csl.innerHTML='';
+    // Pot info
+    if(d.pot>0){['potGrid','potGrid2'].forEach(gid=>{const el=document.getElementById(`${gid}-i${d.pot}`);if(el){const summary=d.class_summary?Object.entries(d.class_summary).map(([k,v])=>`${v} ${k}`).join(', '):`${cnt} objects`;el.textContent=summary;el.className='pot-inf ok'}})}
+    // Detection list
+    const dl=document.getElementById('detectionList');
+    if(d.detections?.length>0){dl.innerHTML=d.detections.map((det,i)=>`<div class="li"><span class="li-n">🎯 ${det.class}</span><span class="li-d">${det.bbox.width}×${det.bbox.height} px</span><span class="li-a">${det.area_px.toLocaleString()} px²</span><span class="li-s">${(det.confidence*100).toFixed(0)}%</span></div>`).join('')}else dl.innerHTML='';
 }
 
 function updateHistory(list){
     document.getElementById('historyCount2').textContent=`${list.length} records`;document.getElementById('historyCount').textContent=list.length;
     const el=document.getElementById('historyList');
     if(!list?.length){el.innerHTML='<div class="h-empty"><div style="font-size:1.4rem;margin-bottom:6px">📭</div>No scans yet</div>';document.getElementById('historyMini').innerHTML='<div class="h-empty" style="padding:16px;font-size:.75rem">No scans yet</div>';return}
-    el.innerHTML=list.slice(-15).reverse().map(h=>{const t=h.timestamp?h.timestamp.substring(11,19):'--';return`<div class="hr"><span class="hr-t">${t}</span><span class="hr-p">Pot ${h.pot}</span><span class="hr-d">${h.leaf_count} leaves · ${h.total_area_px?.toLocaleString()} px²</span><span class="hr-g">${h.green_coverage?.toFixed(1)}%</span></div>`}).join('');
-    document.getElementById('historyMini').innerHTML=list.slice(-4).reverse().map(h=>{const t=h.timestamp?h.timestamp.substring(11,19):'--';return`<div class="mini-hr"><span style="color:var(--muted)">${t}</span><span style="color:var(--orange);font-weight:700">P${h.pot}</span><span>${h.leaf_count}L · ${h.green_coverage?.toFixed(1)}%</span></div>`}).join('');
+    el.innerHTML=list.slice(-15).reverse().map(h=>{const t=h.timestamp?h.timestamp.substring(11,19):'--';const summary=h.class_summary?Object.entries(h.class_summary).map(([k,v])=>`${v} ${k}`).join(', '):`${h.detection_count||0} objects`;return`<div class="hr"><span class="hr-t">${t}</span><span class="hr-p">Pot ${h.pot}</span><span class="hr-d">${summary}</span><span class="hr-g">${h.avg_confidence?(h.avg_confidence*100).toFixed(0)+'%':'—'}</span></div>`}).join('');
+    document.getElementById('historyMini').innerHTML=list.slice(-4).reverse().map(h=>{const t=h.timestamp?h.timestamp.substring(11,19):'--';const cnt=h.detection_count||0;const conf=h.avg_confidence?(h.avg_confidence*100).toFixed(0)+'%':'—';return`<div class="mini-hr"><span style="color:var(--muted)">${t}</span><span style="color:var(--orange);font-weight:700">P${h.pot}</span><span>${cnt} det · ${conf}</span></div>`}).join('');
 }
 
 // ==== Toast ====

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-🌱 Smart Farm Web Server — YOLO Object Detection Edition
-Flask server + Camera Stream + Arduino Control + YOLO best.pt Analysis
+🌱 Smart Farm Web Server
+Flask server + Camera Stream + Arduino Control + Leaf Analysis
 """
 
 import cv2
@@ -19,9 +19,9 @@ from flask import Flask, render_template, Response, jsonify, request
 # ========================================
 # Config
 # ========================================
-MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "best.pt")
-CONFIDENCE_THRESHOLD = 0.25
-IOU_THRESHOLD = 0.45
+HSV_LOW = np.array([25, 40, 40])
+HSV_HIGH = np.array([95, 255, 255])
+MIN_CONTOUR_AREA = 500
 NUM_POTS = 2
 
 # Flask — ใช้ path ของไฟล์นี้เป็นฐาน (ไม่ขึ้นกับ CWD)
@@ -29,34 +29,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__,
             static_folder=os.path.join(BASE_DIR, 'static'),
             template_folder=os.path.join(BASE_DIR, 'templates'))
-
-# ========================================
-# YOLO Model
-# ========================================
-yolo_model = None
-
-def load_yolo_model():
-    """โหลด YOLO model จาก best.pt"""
-    global yolo_model
-    try:
-        from ultralytics import YOLO
-        if not os.path.exists(MODEL_PATH):
-            print(f"❌ Model file not found: {MODEL_PATH}")
-            print(f"   กรุณาวาง best.pt ไว้ใน {BASE_DIR}")
-            return False
-        print(f"🤖 Loading YOLO model: {MODEL_PATH}")
-        yolo_model = YOLO(MODEL_PATH)
-        # Warm up with dummy image
-        dummy = np.zeros((640, 640, 3), dtype=np.uint8)
-        yolo_model.predict(dummy, verbose=False)
-        print(f"✅ YOLO model loaded — classes: {yolo_model.names}")
-        return True
-    except ImportError:
-        print("❌ ultralytics not installed! Run: pip install ultralytics")
-        return False
-    except Exception as e:
-        print(f"❌ YOLO load error: {e}")
-        return False
 
 # ========================================
 # Global State
@@ -78,13 +50,12 @@ class AppState:
         self.scan_history = []
         self.last_analysis = None
         self.latest_frame = None
+        self.hsv_low = HSV_LOW.copy()
+        self.hsv_high = HSV_HIGH.copy()
         self.save_dir = "scan_results"
         # Pump & Soil
         self.pump_states = [False, False]
         self.soil_values = [0, 0]
-        # YOLO
-        self.model_loaded = False
-        self.model_classes = {}  # {id: name}
 
 state = AppState()
 
@@ -180,114 +151,46 @@ class ArduinoController:
 
 
 # ========================================
-# YOLO Analysis
+# Leaf Analysis
 # ========================================
-# สีสำหรับแต่ละ class (จะ cycle ถ้ามากกว่า 10 คลาส)
-CLASS_COLORS = [
-    (0, 255, 100),   # เขียว
-    (255, 100, 0),   # ส้ม
-    (0, 150, 255),   # ฟ้า
-    (255, 0, 100),   # ชมพู
-    (255, 255, 0),   # เหลือง
-    (200, 0, 255),   # ม่วง
-    (0, 255, 255),   # เหลืองเขียว
-    (100, 200, 255), # ฟ้าอ่อน
-    (255, 150, 150), # ชมพูอ่อน
-    (150, 255, 150), # เขียวอ่อน
-]
-
-def get_class_color(class_id):
-    return CLASS_COLORS[class_id % len(CLASS_COLORS)]
+def segment_leaves(frame, hsv_low, hsv_high):
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, hsv_low, hsv_high)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=2)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+    kernel_big = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_big, iterations=1)
+    return mask
 
 def analyze_frame(frame):
-    """วิเคราะห์ frame ด้วย YOLO model"""
-    if yolo_model is None:
-        return {
-            "detection_count": 0,
-            "detections": [],
-            "class_summary": {},
-            "error": "Model not loaded"
-        }
-
-    results = yolo_model.predict(
-        frame,
-        conf=CONFIDENCE_THRESHOLD,
-        iou=IOU_THRESHOLD,
-        verbose=False
-    )
-
-    detections = []
-    class_counts = {}
-
-    if results and len(results) > 0:
-        result = results[0]
-        boxes = result.boxes
-
-        for box in boxes:
-            cls_id = int(box.cls[0])
-            cls_name = result.names[cls_id]
-            conf = float(box.conf[0])
-            x1, y1, x2, y2 = box.xyxy[0].tolist()
-
-            detections.append({
-                "class": cls_name,
-                "class_id": cls_id,
-                "confidence": round(conf, 3),
-                "bbox": {
-                    "x1": int(x1), "y1": int(y1),
-                    "x2": int(x2), "y2": int(y2),
-                    "width": int(x2 - x1),
-                    "height": int(y2 - y1),
-                },
-                "area_px": int((x2 - x1) * (y2 - y1)),
-            })
-
-            class_counts[cls_name] = class_counts.get(cls_name, 0) + 1
-
-    avg_conf = round(
-        sum(d["confidence"] for d in detections) / len(detections), 3
-    ) if detections else 0
-
+    mask = segment_leaves(frame, state.hsv_low, state.hsv_high)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    leaves = []
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area < MIN_CONTOUR_AREA:
+            continue
+        rect = cv2.minAreaRect(contour)
+        w, h = min(rect[1]), max(rect[1])
+        hull = cv2.convexHull(contour)
+        hull_area = cv2.contourArea(hull)
+        leaves.append({
+            "area_px": int(area),
+            "width_px": int(w),
+            "height_px": int(h),
+            "solidity": round(area / hull_area, 3) if hull_area > 0 else 0,
+        })
+    total_px = mask.shape[0] * mask.shape[1]
+    green_px = cv2.countNonZero(mask)
+    coverage = round(green_px / total_px * 100, 2)
+    total_area = sum(l["area_px"] for l in leaves)
     return {
-        "detection_count": len(detections),
-        "detections": detections,
-        "class_summary": class_counts,
-        "avg_confidence": avg_conf,
+        "leaf_count": len(leaves),
+        "total_area_px": total_area,
+        "green_coverage": coverage,
+        "leaves": leaves,
     }
-
-
-def draw_detections(frame, detections):
-    """วาด bounding box บน frame"""
-    annotated = frame.copy()
-
-    for det in detections:
-        bb = det["bbox"]
-        cls_name = det["class"]
-        conf = det["confidence"]
-        cls_id = det.get("class_id", 0)
-        color = get_class_color(cls_id)
-
-        # Bounding box
-        cv2.rectangle(annotated, (bb["x1"], bb["y1"]), (bb["x2"], bb["y2"]), color, 2)
-
-        # Label background
-        label = f'{cls_name} {conf:.0%}'
-        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
-        cv2.rectangle(annotated,
-                      (bb["x1"], bb["y1"] - th - 10),
-                      (bb["x1"] + tw + 8, bb["y1"]),
-                      color, -1)
-        cv2.putText(annotated, label,
-                    (bb["x1"] + 4, bb["y1"] - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
-
-    # Summary text at top-left
-    if detections:
-        summary = f"Detected: {len(detections)} objects"
-        cv2.putText(annotated, summary, (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 100), 2, cv2.LINE_AA)
-
-    return annotated
 
 
 # ========================================
@@ -350,15 +253,23 @@ def _parse_sensors(line):
 
 
 def generate_mjpeg():
-    """MJPEG stream พร้อม YOLO bounding box overlay"""
     while True:
         if state.latest_frame is not None:
             frame = state.latest_frame.copy()
-
-            # ถ้า model โหลดแล้ว → รัน YOLO
-            if yolo_model is not None:
-                analysis = analyze_frame(frame)
-                frame = draw_detections(frame, analysis.get("detections", []))
+            # Draw overlay
+            mask = segment_leaves(frame, state.hsv_low, state.hsv_high)
+            green_overlay = np.zeros_like(frame)
+            green_overlay[:] = (0, 200, 100)
+            mask_3ch = cv2.merge([mask, mask, mask])
+            green_overlay = cv2.bitwise_and(green_overlay, mask_3ch)
+            frame = cv2.addWeighted(frame, 1.0, green_overlay, 0.3, 0)
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            valid = [c for c in contours if cv2.contourArea(c) >= MIN_CONTOUR_AREA]
+            cv2.drawContours(frame, valid, -1, (0, 255, 100), 2)
+            for c in valid:
+                rect = cv2.minAreaRect(c)
+                box = np.int32(cv2.boxPoints(rect))
+                cv2.drawContours(frame, [box], 0, (255, 200, 0), 2)
 
             _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
             yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
@@ -468,19 +379,12 @@ def do_scan_pot(pot_num):
         analysis["pot"] = pot_num
         analysis["timestamp"] = datetime.now().isoformat()
 
-        # Save image (original + annotated)
+        # Save image
         os.makedirs(state.save_dir, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         img_path = os.path.join(state.save_dir, f"pot{pot_num}_{ts}.jpg")
         cv2.imwrite(img_path, frame)
-
-        # Save annotated
-        annotated = draw_detections(frame.copy(), analysis.get("detections", []))
-        ann_path = os.path.join(state.save_dir, f"pot{pot_num}_{ts}_detected.jpg")
-        cv2.imwrite(ann_path, annotated)
-
         analysis["image"] = img_path
-        analysis["image_annotated"] = ann_path
 
         state.scan_history.append(analysis)
         state.last_analysis = analysis
@@ -570,8 +474,6 @@ def api_status():
         "last_analysis": state.last_analysis,
         "pump_states": state.pump_states,
         "soil_values": state.soil_values,
-        "model_loaded": state.model_loaded,
-        "model_classes": state.model_classes,
     })
 
 @app.route('/api/calibrate', methods=['POST'])
@@ -628,8 +530,6 @@ def api_analyze():
     """Analyze current frame without moving"""
     if state.latest_frame is None:
         return jsonify({"error": "No camera"}), 400
-    if not state.model_loaded:
-        return jsonify({"error": "Model not loaded"}), 400
     analysis = analyze_frame(state.latest_frame.copy())
     analysis["pot"] = state.current_pot or 0
     analysis["timestamp"] = datetime.now().isoformat()
@@ -667,27 +567,16 @@ def api_sensors():
 # Main
 # ========================================
 def main():
-    parser = argparse.ArgumentParser(description="🌱 Smart Farm Web Server — YOLO Edition")
+    parser = argparse.ArgumentParser(description="🌱 Smart Farm Web Server")
     parser.add_argument("--port", type=str, default=None, help="Serial port")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--web-port", type=int, default=8080)
     parser.add_argument("--no-serial", action="store_true")
     parser.add_argument("--save-dir", type=str, default="scan_results")
-    parser.add_argument("--model", type=str, default=None, help="Path to YOLO model (best.pt)")
-    parser.add_argument("--confidence", type=float, default=0.25, help="Detection confidence threshold")
     args = parser.parse_args()
 
-    global MODEL_PATH, CONFIDENCE_THRESHOLD
-    if args.model:
-        MODEL_PATH = args.model
-    CONFIDENCE_THRESHOLD = args.confidence
     state.save_dir = args.save_dir
-
-    # Load YOLO model
-    state.model_loaded = load_yolo_model()
-    if state.model_loaded and yolo_model:
-        state.model_classes = dict(yolo_model.names)
 
     # Serial
     if not args.no_serial:
