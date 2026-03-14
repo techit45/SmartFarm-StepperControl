@@ -725,17 +725,20 @@ def api_connect():
     baud = data.get('baud', 115200)
     if not port:
         return jsonify({"error": "Missing 'port' parameter"}), 400
-    # สร้าง controller ใหม่ถ้ายังไม่มี
-    state.arduino = ArduinoController(port, baud)
-    ok = state.arduino.connect()
-    if ok:
-        state.serial_connected = True
-        # เริ่ม sensor poll thread ถ้ายังไม่มี
-        Thread(target=sensor_poll_fn, daemon=True).start()
-        return jsonify({"ok": True, "message": f"Connected to {port}", "port": port})
-    else:
+    try:
+        state.arduino = ArduinoController(port, baud)
+        ok = state.arduino.connect()
+        if ok:
+            state.serial_connected = True
+            Thread(target=sensor_poll_fn, daemon=True).start()
+            return jsonify({"ok": True, "message": f"Connected to {port}", "port": port})
+        else:
+            state.serial_connected = False
+            return jsonify({"error": f"Cannot open {port}. Check the port or permissions."}), 400
+    except Exception as e:
         state.serial_connected = False
-        return jsonify({"error": f"Failed to connect to {port}"}), 500
+        print(f"❌ Connect error: {e}")
+        return jsonify({"error": f"Connect error: {str(e)}"}), 400
 
 @app.route('/api/disconnect', methods=['POST'])
 def api_disconnect():
