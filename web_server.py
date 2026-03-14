@@ -85,6 +85,8 @@ class AppState:
         # YOLO
         self.model_loaded = False
         self.model_classes = {}  # {id: name}
+        # Camera
+        self.camera_id = None  # current camera index
 
 state = AppState()
 
@@ -578,6 +580,8 @@ def api_status():
         "model_classes": state.model_classes,
         "confidence_threshold": CONFIDENCE_THRESHOLD,
         "serial_port": state.arduino.port if state.arduino and state.arduino.ser and state.arduino.ser.is_open else None,
+        "camera_opened": state.cap is not None and state.cap.isOpened(),
+        "camera_id": state.camera_id,
     })
 
 @app.route('/api/calibrate', methods=['POST'])
@@ -754,6 +758,64 @@ def api_disconnect():
     state.motor_status = ""
     return jsonify({"ok": True, "message": "Disconnected"})
 
+@app.route('/api/cameras')
+def api_cameras():
+    """ตรวจหากล้องที่ใช้ได้ (index 0-4)"""
+    available = []
+    for i in range(5):
+        # ถ้ากล้องนี้เปิดอยู่แล้ว ไม่ต้องทดสอบ
+        if state.cap and state.camera_id == i:
+            available.append({"index": i, "name": f"Camera {i}", "active": True})
+        else:
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                available.append({"index": i, "name": f"Camera {i}", "active": False})
+                cap.release()
+    return jsonify({
+        "cameras": available,
+        "current": state.camera_id,
+        "opened": state.cap is not None and state.cap.isOpened(),
+    })
+
+@app.route('/api/camera/open', methods=['POST'])
+def api_camera_open():
+    """เปิดกล้องตาม index"""
+    data = request.get_json(silent=True) or {}
+    cam_id = data.get('camera', 0)
+    try:
+        cam_id = int(cam_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid camera index"}), 400
+    # ปิดกล้องเดิมถ้ามี
+    if state.cap and state.cap.isOpened():
+        state.cap.release()
+        state.cap = None
+        state.latest_frame = None
+        time.sleep(0.3)
+    cap = cv2.VideoCapture(cam_id)
+    if not cap.isOpened():
+        return jsonify({"error": f"Cannot open Camera {cam_id}"}), 500
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    time.sleep(0.5)
+    state.cap = cap
+    state.camera_id = cam_id
+    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    print(f"✅ Camera {cam_id} opened: {w}×{h}")
+    return jsonify({"ok": True, "message": f"Camera {cam_id} opened ({w}×{h})", "camera": cam_id, "width": w, "height": h})
+
+@app.route('/api/camera/close', methods=['POST'])
+def api_camera_close():
+    """ปิดกล้อง"""
+    if state.cap and state.cap.isOpened():
+        state.cap.release()
+    state.cap = None
+    state.latest_frame = None
+    state.camera_id = None
+    print("📷 Camera closed")
+    return jsonify({"ok": True, "message": "Camera closed"})
+
 
 # ========================================
 # Main
@@ -790,19 +852,21 @@ def main():
     else:
         print("⚠️  No-serial mode")
 
-    # Camera
-    print(f"📷 Opening camera {args.camera}...")
-    state.cap = cv2.VideoCapture(args.camera)
-    if not state.cap.isOpened():
-        print("❌ Camera failed!")
-        return
-    state.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    state.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-    time.sleep(1)
-    state.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
-    state.cap.set(cv2.CAP_PROP_EXPOSURE, -6)
-    state.cap.set(cv2.CAP_PROP_AUTO_WB, 0)
-    print(f"✅ Camera: {int(state.cap.get(3))}×{int(state.cap.get(4))}")
+    # Camera — ไม่ auto-open ถ้าไม่ระบุ --camera (ให้เลือกจาก UI)
+    if args.camera is not None:
+        print(f"📷 Opening camera {args.camera}...")
+        state.cap = cv2.VideoCapture(args.camera)
+        if not state.cap.isOpened():
+            print("❌ Camera failed! Select camera from the web UI.")
+            state.cap = None
+        else:
+            state.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            state.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            time.sleep(1)
+            state.camera_id = args.camera
+            print(f"✅ Camera: {int(state.cap.get(3))}×{int(state.cap.get(4))}")
+    else:
+        print("ℹ️  No --camera specified. Select camera from the web UI.")
 
     # Camera thread
     cam_thread = Thread(target=camera_thread_fn, daemon=True)

@@ -334,6 +334,22 @@
         </div>
     </div>
     <div class="cd half">
+        <div class="cd-h"><div class="cd-t">📷 Camera</div><div class="cd-i" id="camStatus" style="color:var(--err)">❌ Closed</div></div>
+        <div class="cd-b">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+                <select id="camSelect" style="flex:1;padding:8px 12px;border-radius:var(--rs);border:1px solid var(--bdr);background:var(--bg2);color:var(--txt);font-size:.82rem">
+                    <option value="">— Select Camera —</option>
+                </select>
+                <button class="bt" onclick="loadCameras()" style="padding:8px 14px">🔄</button>
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="bt pr f" id="btnCamOpen" onclick="doCameraOpen()">📷 Open</button>
+                <button class="bt" id="btnCamClose" onclick="doCameraClose()" disabled>❌ Close</button>
+            </div>
+            <div id="camInfo" style="margin-top:10px;font-size:.7rem;color:var(--muted)"></div>
+        </div>
+    </div>
+    <div class="cd half">
         <div class="cd-h"><div class="cd-t">🪴 Plant Pots</div></div>
         <div class="cd-b">
             <div class="pot-row" id="potGrid2"></div>
@@ -649,6 +665,67 @@ function updateSerialUI(connected, port) {
     }
 }
 
+// ==== Camera Management ====
+async function loadCameras() {
+    try {
+        const resp = await fetch('/api/cameras');
+        const data = await resp.json();
+        const sel = document.getElementById('camSelect');
+        sel.innerHTML = '<option value="">— Select Camera —</option>';
+        (data.cameras || []).forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.index;
+            opt.textContent = c.name + (c.active ? ' (active)' : '');
+            if (c.index === data.current) opt.selected = true;
+            sel.appendChild(opt);
+        });
+        updateCameraUI(data.opened, data.current);
+    } catch(e) { console.error('loadCameras:', e); }
+}
+async function doCameraOpen() {
+    const cam = document.getElementById('camSelect').value;
+    if (cam === '') { showToast('Select a camera first', 'warn'); return; }
+    document.getElementById('btnCamOpen').disabled = true;
+    try {
+        const resp = await fetch('/api/camera/open', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({camera: parseInt(cam)})
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            showToast(data.message);
+            updateCameraUI(true, parseInt(cam));
+        } else {
+            showToast(data.error || 'Failed', 'err');
+        }
+    } catch(e) { showToast(e.message, 'err'); }
+    document.getElementById('btnCamOpen').disabled = false;
+}
+async function doCameraClose() {
+    const r = await apiPost('/api/camera/close');
+    if (r.ok) updateCameraUI(false, null);
+}
+function updateCameraUI(opened, camId) {
+    const st = document.getElementById('camStatus');
+    const btnO = document.getElementById('btnCamOpen');
+    const btnC = document.getElementById('btnCamClose');
+    const info = document.getElementById('camInfo');
+    if (opened) {
+        st.textContent = '✅ Camera ' + camId;
+        st.style.color = 'var(--green)';
+        btnO.disabled = true;
+        btnC.disabled = false;
+        if (info) info.textContent = 'Camera ' + camId + ' is active';
+    } else {
+        st.textContent = '❌ Closed';
+        st.style.color = 'var(--err)';
+        btnO.disabled = false;
+        btnC.disabled = true;
+        if (info) info.textContent = '';
+    }
+}
+
 // ==== Confidence Slider ====
 let confSynced = false;
 function onConfSliderInput(val) {
@@ -774,6 +851,8 @@ async function pollStatus(){try{
     updatePumpUI(s.pump_states);
     // Sync serial connection status
     updateSerialUI(s.serial_connected, s.serial_port);
+    // Sync camera status
+    updateCameraUI(s.camera_opened, s.camera_id);
     // Sync confidence slider (once)
     if(!confSynced && s.confidence_threshold){
         const pct = Math.round(s.confidence_threshold * 100);
@@ -785,7 +864,7 @@ async function pollStatus(){try{
 async function pollHistory(){try{updateHistory(await(await fetch('/api/history')).json())}catch(e){}}
 
 // ==== Init ====
-initPots();initSoilPump();init3D();loadPorts();setInterval(pollStatus,800);setInterval(pollHistory,3000);
+initPots();initSoilPump();init3D();loadPorts();loadCameras();setInterval(pollStatus,800);setInterval(pollHistory,3000);
 </script>
 </body>
 </html>
