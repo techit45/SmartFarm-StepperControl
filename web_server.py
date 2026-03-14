@@ -378,6 +378,10 @@ def do_calibrate():
     state.motor_busy = True
     state.motor_status = "Calibrating..."
     try:
+        # รอให้ sensor poll จบก่อน + flush serial buffer
+        time.sleep(0.5)
+        if state.arduino.ser:
+            state.arduino.ser.reset_input_buffer()
         ok, lines = state.arduino.send_command("calibrate", "--- Calibration Complete ---", timeout=120)
         if ok:
             for line in lines:
@@ -581,6 +585,8 @@ def api_calibrate():
         return jsonify({"error": "No serial connection"}), 400
     if state.motor_busy:
         return jsonify({"error": "Motor busy"}), 400
+    state.motor_busy = True  # ตั้งก่อนเริ่ม thread เพื่อป้องกัน sensor poll แย่ง serial
+    state.motor_status = "Calibrating..."
     Thread(target=do_calibrate, daemon=True).start()
     return jsonify({"ok": True, "message": "Calibrating..."})
 
@@ -592,6 +598,8 @@ def api_goto(pot):
         return jsonify({"error": "Motor busy"}), 400
     if pot < 1 or pot > NUM_POTS:
         return jsonify({"error": f"Invalid pot (1-{NUM_POTS})"}), 400
+    state.motor_busy = True
+    state.motor_status = f"Moving to Pot {pot}..."
     Thread(target=do_goto_pot, args=(pot,), daemon=True).start()
     return jsonify({"ok": True, "message": f"Moving to Pot {pot}"})
 
@@ -601,6 +609,8 @@ def api_home():
         return jsonify({"error": "No serial connection"}), 400
     if state.motor_busy:
         return jsonify({"error": "Motor busy"}), 400
+    state.motor_busy = True
+    state.motor_status = "Going Home..."
     Thread(target=do_go_home, daemon=True).start()
     return jsonify({"ok": True, "message": "Going home"})
 
@@ -610,6 +620,8 @@ def api_scan(pot):
         return jsonify({"error": "Motor busy"}), 400
     if pot < 1 or pot > NUM_POTS:
         return jsonify({"error": f"Invalid pot (1-{NUM_POTS})"}), 400
+    state.motor_busy = True
+    state.motor_status = f"Scanning Pot {pot}..."
     Thread(target=do_scan_pot, args=(pot,), daemon=True).start()
     return jsonify({"ok": True, "message": f"Scanning Pot {pot}"})
 
@@ -617,6 +629,8 @@ def api_scan(pot):
 def api_auto_scan():
     if state.motor_busy:
         return jsonify({"error": "Motor busy"}), 400
+    state.motor_busy = True
+    state.motor_status = "Auto Scan..."
     Thread(target=do_auto_scan, daemon=True).start()
     return jsonify({"ok": True, "message": "Auto scanning all pots"})
 
