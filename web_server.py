@@ -577,6 +577,7 @@ def api_status():
         "model_loaded": state.model_loaded,
         "model_classes": state.model_classes,
         "confidence_threshold": CONFIDENCE_THRESHOLD,
+        "serial_port": state.arduino.port if state.arduino and state.arduino.ser and state.arduino.ser.is_open else None,
     })
 
 @app.route('/api/calibrate', methods=['POST'])
@@ -694,6 +695,65 @@ def api_sensors():
         "soil_values": state.soil_values,
     })
 
+@app.route('/api/ports')
+def api_ports():
+    """แสดง serial port ที่มี"""
+    ports = []
+    for p in serial.tools.list_ports.comports():
+        ports.append({
+            "device": p.device,
+            "description": p.description,
+            "hwid": p.hwid,
+        })
+    return jsonify({
+        "ports": ports,
+        "connected": state.serial_connected,
+        "current_port": state.arduino.port if state.arduino and state.arduino.ser and state.arduino.ser.is_open else None,
+    })
+
+@app.route('/api/connect', methods=['POST'])
+def api_connect():
+    """เชื่อมต่อ serial port"""
+    if state.serial_connected:
+        return jsonify({"error": "Already connected. Disconnect first."}), 400
+    data = request.get_json(silent=True) or {}
+    port = data.get('port')
+    baud = data.get('baud', 115200)
+    if not port:
+        return jsonify({"error": "Missing 'port' parameter"}), 400
+    # สร้าง controller ใหม่ถ้ายังไม่มี
+    state.arduino = ArduinoController(port, baud)
+    ok = state.arduino.connect()
+    if ok:
+        state.serial_connected = True
+        # เริ่ม sensor poll thread ถ้ายังไม่มี
+        Thread(target=sensor_poll_fn, daemon=True).start()
+        return jsonify({"ok": True, "message": f"Connected to {port}", "port": port})
+    else:
+        state.serial_connected = False
+        return jsonify({"error": f"Failed to connect to {port}"}), 500
+
+@app.route('/api/disconnect', methods=['POST'])
+def api_disconnect():
+    """ตัดการเชื่อมต่อ serial"""
+    if not state.serial_connected:
+        return jsonify({"error": "Not connected"}), 400
+    if state.motor_busy:
+        return jsonify({"error": "Motor busy, cannot disconnect"}), 400
+    try:
+        if state.arduino:
+            state.arduino.disconnect()
+    except Exception:
+        pass
+    state.serial_connected = False
+    state.is_calibrated = False
+    state.total_steps = 0
+    state.current_position = 0
+    state.current_pot = None
+    state.pot_positions = []
+    state.motor_status = ""
+    return jsonify({"ok": True, "message": "Disconnected"})
+
 
 # ========================================
 # Main
@@ -721,12 +781,13 @@ def main():
     if state.model_loaded and yolo_model:
         state.model_classes = dict(yolo_model.names)
 
-    # Serial
-    if not args.no_serial:
-        state.arduino = ArduinoController(args.port, args.baud)
+    # Serial — ไม่ auto-connect ถ้าไม่ระบุ --port (ให้เลือกจาก UI)
+    state.arduino = ArduinoController(args.port, args.baud)
+    if not args.no_serial and args.port:
         state.serial_connected = state.arduino.connect()
+    elif not args.no_serial:
+        print("ℹ️  No --port specified. Select port from the web UI.")
     else:
-        state.arduino = ArduinoController()
         print("⚠️  No-serial mode")
 
     # Camera

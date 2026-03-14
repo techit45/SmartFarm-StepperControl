@@ -318,6 +318,22 @@
 <!-- ===== CONTROLS ===== -->
 <div class="pane detail" id="t-ctrl">
     <div class="cd half">
+        <div class="cd-h"><div class="cd-t">🔌 Serial Connection</div><div class="cd-i" id="serialStatus" style="color:var(--err)">❌ Disconnected</div></div>
+        <div class="cd-b">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+                <select id="portSelect" style="flex:1;padding:8px 12px;border-radius:var(--rs);border:1px solid var(--bdr);background:var(--bg2);color:var(--txt);font-size:.82rem">
+                    <option value="">— Select Port —</option>
+                </select>
+                <button class="bt" onclick="loadPorts()" style="padding:8px 14px">🔄</button>
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="bt pr f" id="btnConnect" onclick="doConnect()">🔌 Connect</button>
+                <button class="bt" id="btnDisconnect" onclick="doDisconnect()" disabled>❌ Disconnect</button>
+            </div>
+            <div id="portInfo" style="margin-top:10px;font-size:.7rem;color:var(--muted)"></div>
+        </div>
+    </div>
+    <div class="cd half">
         <div class="cd-h"><div class="cd-t">🪴 Plant Pots</div></div>
         <div class="cd-b">
             <div class="pot-row" id="potGrid2"></div>
@@ -570,6 +586,69 @@ async function doScan(p) { if (!busy) await apiPost(`/api/scan/${p}`); }
 async function doAutoScan() { if (!busy) await apiPost('/api/auto_scan'); }
 async function doAnalyze() { const r = await apiPost('/api/analyze'); if (!r.error) { updateAnalysis(r); switchTab('t-ana'); } }
 
+// ==== Serial Port Management ====
+async function loadPorts() {
+    try {
+        const resp = await fetch('/api/ports');
+        const data = await resp.json();
+        const sel = document.getElementById('portSelect');
+        const curVal = sel.value;
+        sel.innerHTML = '<option value="">— Select Port —</option>';
+        (data.ports || []).forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.device;
+            opt.textContent = `${p.device} — ${p.description}`;
+            if (p.device === data.current_port) opt.selected = true;
+            sel.appendChild(opt);
+        });
+        if (!data.current_port && curVal) sel.value = curVal;
+        updateSerialUI(data.connected, data.current_port);
+    } catch(e) { console.error('loadPorts:', e); }
+}
+async function doConnect() {
+    const port = document.getElementById('portSelect').value;
+    if (!port) { showToast('Select a port first', 'warn'); return; }
+    document.getElementById('btnConnect').disabled = true;
+    try {
+        const resp = await fetch('/api/connect', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({port})
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            showToast(data.message);
+            updateSerialUI(true, port);
+        } else {
+            showToast(data.error || 'Failed', 'err');
+        }
+    } catch(e) { showToast(e.message, 'err'); }
+    document.getElementById('btnConnect').disabled = false;
+}
+async function doDisconnect() {
+    const r = await apiPost('/api/disconnect');
+    if (r.ok) updateSerialUI(false, null);
+}
+function updateSerialUI(connected, port) {
+    const st = document.getElementById('serialStatus');
+    const btnC = document.getElementById('btnConnect');
+    const btnD = document.getElementById('btnDisconnect');
+    const info = document.getElementById('portInfo');
+    if (connected) {
+        st.textContent = '✅ ' + (port || 'Connected');
+        st.style.color = 'var(--green)';
+        btnC.disabled = true;
+        btnD.disabled = false;
+        if (info) info.textContent = 'Connected to ' + port;
+    } else {
+        st.textContent = '❌ Disconnected';
+        st.style.color = 'var(--err)';
+        btnC.disabled = false;
+        btnD.disabled = true;
+        if (info) info.textContent = '';
+    }
+}
+
 // ==== Confidence Slider ====
 let confSynced = false;
 function onConfSliderInput(val) {
@@ -693,6 +772,8 @@ async function pollStatus(){try{
     // Soil & Pump
     updateSoilUI(s.soil_values);
     updatePumpUI(s.pump_states);
+    // Sync serial connection status
+    updateSerialUI(s.serial_connected, s.serial_port);
     // Sync confidence slider (once)
     if(!confSynced && s.confidence_threshold){
         const pct = Math.round(s.confidence_threshold * 100);
@@ -704,7 +785,7 @@ async function pollStatus(){try{
 async function pollHistory(){try{updateHistory(await(await fetch('/api/history')).json())}catch(e){}}
 
 // ==== Init ====
-initPots();initSoilPump();init3D();setInterval(pollStatus,800);setInterval(pollHistory,3000);
+initPots();initSoilPump();init3D();loadPorts();setInterval(pollStatus,800);setInterval(pollHistory,3000);
 </script>
 </body>
 </html>
